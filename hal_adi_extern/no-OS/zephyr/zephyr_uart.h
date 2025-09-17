@@ -45,7 +45,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "no_os_lf256fifo.h"
 
 /******************************************************************************/
 /********************** Macros and Constants Definitions **********************/

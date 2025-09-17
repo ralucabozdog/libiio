@@ -44,7 +44,6 @@
 #include "no_os_irq.h"
 #include "zephyr_uart.h"
 #include "no_os_error.h"
-#include "no_os_delay.h"
 
 #if defined(NO_OS_LWIP_NETWORKING)
 #include "lwip_socket.h"

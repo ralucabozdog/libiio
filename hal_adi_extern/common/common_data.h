@@ -43,7 +43,6 @@
 /***************************** Include Files **********************************/
 /******************************************************************************/
 #include "platform_includes.h"
-#include "app_config.h"
 #include "no_os_util.h"
 #include "adc_demo.h"
 #include "dac_demo.h"
