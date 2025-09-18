@@ -1,10 +1,9 @@
 /***************************************************************************//**
- *   @file   parameters.h
- *   @brief  Definitions specific to Maxim platform used by iio_demo
- *           project.
+ *   @file   maxim_irq.h
+ *   @brief  Header file for maxim irq specifics.
  *   @author Ciprian Regus (ciprian.regus@analog.com)
 ********************************************************************************
- * Copyright 2022(c) Analog Devices, Inc.
+ * Copyright 2023(c) Analog Devices, Inc.
  *
  * All rights reserved.
  *
@@ -37,38 +36,45 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
-#ifndef __PARAMETERS_H__
-#define __PARAMETERS_H__
+#ifndef MAXIM_IRQ_H_
+#define MAXIM_IRQ_H_
 
-/******************************************************************************/
-/***************************** Include Files **********************************/
-/******************************************************************************/
-#include "maxim_uart.h"
-#include "no_os_util.h"
-#include "no_os_timer.h"
-#if defined(ZEPHYR_BACKEND)
-#include "zephyr_uart_no_os.h"
+#include "max32690.h"
+#include "no_os_irq.h"
+#include "no_os_list.h"
+#include "uart.h"
+
+/**
+ * @brief Struct used to store a (peripheral, callback) pair
+ */
+struct irq_action {
+	uint32_t irq_id;
+	void *handle;
+	void (*callback)(void *context);
+	void *ctx;
+};
+
+/**
+ * @brief Struct that stores all the actions for a specific event
+ */
+struct event_list {
+	enum no_os_irq_event event;
+	struct no_os_list_desc *actions;
+};
+
+/**
+ * @brief maxim platform specific irq platform ops structure
+ */
+extern const struct no_os_irq_platform_ops max_irq_ops;
+
+/**
+ * @brief Platform specific uart callback function
+ */
+void max_uart_callback(mxc_uart_req_t *, int);
+
+/**
+ * @brief irq_action compare function
+ */
+int32_t irq_action_cmp(void *data1, void *data2);
+
 #endif
-
-/******************************************************************************/
-/********************** Macros and Constants Definitions **********************/
-/******************************************************************************/
-#define MAX_SIZE_BASE_ADDR	(SAMPLES_PER_CHANNEL * DEMO_CHANNELS * \
-					sizeof(uint16_t))
-
-#define SAMPLES_PER_CHANNEL_PLATFORM 2000
-
-#define INTC_DEVICE_ID	0
-#define UART_IRQ_ID    	UART0_IRQn
-#define UART_DEVICE_ID	0
-#define UART_BAUDRATE	115200
-#define UART_EXTRA      &iio_demo_uart_extra_ip
-#if defined(ZEPHYR_BACKEND)
-#define UART_OPS        &zephyr_uart_no_os_ops
-#else
-#define UART_OPS        &max_uart_ops
-#endif
-
-extern struct max_uart_init_param iio_demo_uart_extra_ip;
-
-#endif /* __PARAMETERS_H__ */

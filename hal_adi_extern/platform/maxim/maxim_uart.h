@@ -1,10 +1,9 @@
 /***************************************************************************//**
- *   @file   parameters.h
- *   @brief  Definitions specific to Maxim platform used by iio_demo
- *           project.
+ *   @file   maxim_uart.h
+ *   @brief  Header file of UART driver.
  *   @author Ciprian Regus (ciprian.regus@analog.com)
 ********************************************************************************
- * Copyright 2022(c) Analog Devices, Inc.
+ * Copyright 2023(c) Analog Devices, Inc.
  *
  * All rights reserved.
  *
@@ -37,38 +36,43 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
-#ifndef __PARAMETERS_H__
-#define __PARAMETERS_H__
 
-/******************************************************************************/
-/***************************** Include Files **********************************/
-/******************************************************************************/
-#include "maxim_uart.h"
-#include "no_os_util.h"
-#include "no_os_timer.h"
-#if defined(ZEPHYR_BACKEND)
-#include "zephyr_uart_no_os.h"
+#ifndef MAXIM_UART_H_
+#define MAXIM_UART_H_
+
+#include "uart.h"
+#include "no_os_irq.h"
+#include "max32690.h"
+#include "no_os_uart.h"
+
+/**
+ * @brief UART flow control
+ */
+enum max_uart_flow_ctrl {
+	UART_FLOW_DIS,
+	UART_FLOW_LOW,
+	UART_FLOW_HIGH
+};
+
+/**
+ * @brief Aditional UART config parameters
+ */
+struct max_uart_init_param {
+	enum max_uart_flow_ctrl flow;
+	mxc_gpio_vssel_t vssel;
+};
+
+/**
+ * @brief Platform specific UART state
+ */
+struct max_uart_desc {
+	/** Controller that handles UART interrupts */
+	struct no_os_irq_ctrl_desc *nvic;
+};
+
+/**
+ * @brief Maxim specific UART platform ops structure
+ */
+extern const struct no_os_uart_platform_ops max_uart_ops;
+
 #endif
-
-/******************************************************************************/
-/********************** Macros and Constants Definitions **********************/
-/******************************************************************************/
-#define MAX_SIZE_BASE_ADDR	(SAMPLES_PER_CHANNEL * DEMO_CHANNELS * \
-					sizeof(uint16_t))
-
-#define SAMPLES_PER_CHANNEL_PLATFORM 2000
-
-#define INTC_DEVICE_ID	0
-#define UART_IRQ_ID    	UART0_IRQn
-#define UART_DEVICE_ID	0
-#define UART_BAUDRATE	115200
-#define UART_EXTRA      &iio_demo_uart_extra_ip
-#if defined(ZEPHYR_BACKEND)
-#define UART_OPS        &zephyr_uart_no_os_ops
-#else
-#define UART_OPS        &max_uart_ops
-#endif
-
-extern struct max_uart_init_param iio_demo_uart_extra_ip;
-
-#endif /* __PARAMETERS_H__ */

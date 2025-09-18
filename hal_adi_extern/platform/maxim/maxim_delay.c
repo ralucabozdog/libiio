@@ -1,10 +1,9 @@
-/***************************************************************************//**
- *   @file   parameters.h
- *   @brief  Definitions specific to Maxim platform used by iio_demo
- *           project.
+/*******************************************************************************
+ *   @file   maxim_delay.c
+ *   @brief  Implementation of maxim delay functions.
  *   @author Ciprian Regus (ciprian.regus@analog.com)
 ********************************************************************************
- * Copyright 2022(c) Analog Devices, Inc.
+ * Copyright 2023(c) Analog Devices, Inc.
  *
  * All rights reserved.
  *
@@ -37,38 +36,54 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
-#ifndef __PARAMETERS_H__
-#define __PARAMETERS_H__
-
-/******************************************************************************/
-/***************************** Include Files **********************************/
-/******************************************************************************/
-#include "maxim_uart.h"
+#include "no_os_delay.h"
 #include "no_os_util.h"
-#include "no_os_timer.h"
-#if defined(ZEPHYR_BACKEND)
-#include "zephyr_uart_no_os.h"
-#endif
+#include "mxc_delay.h"
+#include "mxc_sys.h"
 
-/******************************************************************************/
-/********************** Macros and Constants Definitions **********************/
-/******************************************************************************/
-#define MAX_SIZE_BASE_ADDR	(SAMPLES_PER_CHANNEL * DEMO_CHANNELS * \
-					sizeof(uint16_t))
+// static volatile unsigned long long _system_ticks = 0;
 
-#define SAMPLES_PER_CHANNEL_PLATFORM 2000
+// extern void SysTick_Handler(void);
 
-#define INTC_DEVICE_ID	0
-#define UART_IRQ_ID    	UART0_IRQn
-#define UART_DEVICE_ID	0
-#define UART_BAUDRATE	115200
-#define UART_EXTRA      &iio_demo_uart_extra_ip
-#if defined(ZEPHYR_BACKEND)
-#define UART_OPS        &zephyr_uart_no_os_ops
-#else
-#define UART_OPS        &max_uart_ops
-#endif
+/* ************************************************************************** */
+// void SysTick_Handler(void)
+// {
+// 	MXC_DelayHandler();
+// 	_system_ticks++;
+// }
 
-extern struct max_uart_init_param iio_demo_uart_extra_ip;
+// /**
+//  * @brief Generate microseconds delay.
+//  * @param usecs - Delay in microseconds.
+//  * @return None.
+//  */
+// void no_os_udelay(uint32_t usecs)
+// {
+// 	MXC_Delay(MXC_DELAY_USEC(usecs));
+// }
 
-#endif /* __PARAMETERS_H__ */
+/**
+ * @brief Generate miliseconds delay.
+ * @param msecs - Delay in miliseconds.
+ * @return None.
+ */
+void no_os_mdelay(uint32_t msecs)
+{
+	MXC_Delay(MXC_DELAY_MSEC(msecs));
+}
+
+// /**
+//  * @brief Get current time.
+//  * @return Current time structure from system start (seconds, microseconds).
+//  */
+// struct no_os_time no_os_get_time(void)
+// {
+// 	struct no_os_time t;
+
+// 	t.s = _system_ticks / 1000;
+
+// 	t.us = (_system_ticks - t.s * 1000) * 1000 + SysTick->VAL /
+// 	       (SystemCoreClock / 1000000);
+
+// 	return t;
+// }
