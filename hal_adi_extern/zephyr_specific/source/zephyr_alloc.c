@@ -1,10 +1,9 @@
-/***************************************************************************//**
- *   @file   parameters.h
- *   @brief  Definitions specific to Maxim platform used by iio_demo
- *           project.
- *   @author Ciprian Regus (ciprian.regus@analog.com)
+/*******************************************************************************
+ *   @file   util/no_os_alloc.c
+ *   @brief  Implementation of no-OS memory allocation functions.
+ *   @author GMois (george.mois@analog.com)
 ********************************************************************************
- * Copyright 2022(c) Analog Devices, Inc.
+ * Copyright 2023(c) Analog Devices, Inc.
  *
  * All rights reserved.
  *
@@ -37,38 +36,38 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
-#ifndef __PARAMETERS_H__
-#define __PARAMETERS_H__
 
-/******************************************************************************/
-/***************************** Include Files **********************************/
-/******************************************************************************/
-#include "maxim_uart.h"
-#include "zephyr_util.h"
-// #include "no_os_timer.h"
-#if defined(ZEPHYR_BACKEND)
-#include "zephyr_uart_no_os.h"
-#endif
+#include "zephyr_alloc.h"
 
-/******************************************************************************/
-/********************** Macros and Constants Definitions **********************/
-/******************************************************************************/
-#define MAX_SIZE_BASE_ADDR	(SAMPLES_PER_CHANNEL * DEMO_CHANNELS * \
-					sizeof(uint16_t))
+/**
+ * @brief Allocate memory and return a pointer to it.
+ * @param size - Size of the memory block, in bytes.
+ * @return Pointer to the allocated memory, or NULL if the request fails.
+ */
+__attribute__((weak)) void *zephyr_malloc(size_t size)
+{
+	return malloc(size);
+}
 
-#define SAMPLES_PER_CHANNEL_PLATFORM 2000
+/**
+ * @brief Allocate memory and return a pointer to it, set memory to 0.
+ * @param nitems - Number of elements to be allocated.
+ * @param size - Size of elements.
+ * @return Pointer to the allocated memory, or NULL if the request fails.
+ */
+__attribute__((weak)) void *zephyr_calloc(size_t nitems, size_t size)
+{
+	return calloc(nitems, size);
+}
 
-#define INTC_DEVICE_ID	0
-#define UART_IRQ_ID    	UART0_IRQn
-#define UART_DEVICE_ID	0
-#define UART_BAUDRATE	115200
-#define UART_EXTRA      &iio_demo_uart_extra_ip
-#if defined(ZEPHYR_BACKEND)
-#define UART_OPS        &zephyr_uart_no_os_ops
-#else
-#define UART_OPS        &max_uart_ops
-#endif
-
-extern struct max_uart_init_param iio_demo_uart_extra_ip;
-
-#endif /* __PARAMETERS_H__ */
+/**
+ * @brief Deallocate memory previously allocated by a call to zephyr_calloc
+ * 		  or zephyr_malloc.
+ * @param ptr - Pointer to a memory block previously allocated by a call
+ * 		  to zephyr_calloc or zephyr_malloc.
+ * @return None.
+ */
+__attribute__((weak)) void zephyr_free(void *ptr)
+{
+	free(ptr);
+}

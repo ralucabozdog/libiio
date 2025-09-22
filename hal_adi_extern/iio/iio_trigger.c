@@ -43,7 +43,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "no_os_error.h"
-#include "no_os_alloc.h"
+#include "zephyr_alloc.h"
 #include "iio.h"
 #include "iio_trigger.h"
 

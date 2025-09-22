@@ -45,7 +45,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "no_os_circular_buffer.h"
+#include "zephyr_circular_buffer.h"
 
 /******************************************************************************/
 /*************************** Types Declarations *******************************/

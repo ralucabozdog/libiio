@@ -41,7 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "no_os_error.h"
-#include "no_os_util.h"
+#include "zephyr_util.h"
 #include "iio_adc_demo.h"
 #include "iio.h"
 
@@ -114,7 +114,7 @@ int set_adc_demo_attr(void *device, char *buf, uint32_t len,
 		      const struct iio_ch_info *channel, intptr_t attr_id)
 {
 	struct adc_demo_desc *desc;
-	uint32_t value = no_os_str_to_uint32(buf);
+	uint32_t value = zephyr_str_to_uint32(buf);
 
 	if(!device)
 		return -ENODEV;

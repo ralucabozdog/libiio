@@ -46,8 +46,8 @@
 #include <stdlib.h>
 #include "adc_demo.h"
 #include "no_os_error.h"
-#include "no_os_util.h"
-#include "no_os_alloc.h"
+#include "zephyr_util.h"
+#include "zephyr_alloc.h"
 
 /* default sine lookup table to be used if ext_buff is not available */
 const uint16_t sine_lut[128] = {
@@ -83,7 +83,7 @@ int32_t adc_demo_init(struct adc_demo_desc **desc,
 		      struct adc_demo_init_param *param)
 {
 	struct adc_demo_desc *adesc;
-	adesc = (struct adc_demo_desc*)no_os_calloc(1, sizeof(*adesc));
+	adesc = (struct adc_demo_desc*)zephyr_calloc(1, sizeof(*adesc));
 
 	if(!adesc)
 		return -ENOMEM;

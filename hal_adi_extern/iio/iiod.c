@@ -47,7 +47,7 @@
 #include "iiod_private.h"
 
 #include "no_os_error.h"
-#include "no_os_util.h"
+#include "zephyr_util.h"
 
 #define SET_DUMMY_IF_NULL(func, dummy) ((func) ? (func) : (dummy))
 

@@ -43,7 +43,7 @@
 #include <stdio.h>
 #include "iio_app.h"
 #include "parameters.h"
-#include "no_os_alloc.h"
+#include "zephyr_alloc.h"
 #include "no_os_uart.h"
 #include "zephyr_uart_no_os.h"
 #include <zephyr/drivers/uart.h>
@@ -102,7 +102,7 @@ static int32_t iio_print_uart_info_message(struct no_os_uart_desc **uart_desc,
 	int32_t status;
 	uint32_t delay_ms;
 
-	status = no_os_uart_write(*uart_desc, (uint8_t *)message, msglen);
+	status = zephyr_uart_write(*uart_desc, (uint8_t *)message, msglen);
 	if (status < 0)
 		return status;
 
@@ -110,8 +110,8 @@ static int32_t iio_print_uart_info_message(struct no_os_uart_desc **uart_desc,
 	no_os_mdelay(delay_ms);
 
 	/** Reinitialize UART with parameters required by the IIO application */
-	no_os_uart_remove(*uart_desc);
-	return no_os_uart_init(uart_desc, user_uart_params);
+	zephyr_uart_remove(*uart_desc);
+	return zephyr_uart_init(uart_desc, user_uart_params);
 }
 #endif
 
@@ -243,7 +243,7 @@ static int32_t network_setup(struct iio_init_param *iio_init_param,
 static int32_t uart_setup(struct no_os_uart_desc **uart_desc,
 			  struct no_os_uart_init_param *uart_init_par)
 {	
-	return no_os_uart_init(uart_desc, uart_init_par);
+	return zephyr_uart_init(uart_desc, uart_init_par);
 }
 
 #if defined(ADUCM_PLATFORM) || (defined(STM32_PLATFORM)) || defined(MAXIM_PLATFORM)
@@ -295,7 +295,7 @@ int iio_app_init(struct iio_app_desc **app,
 	int status;
 	void *irq_desc = app_init_param.irq_desc;
 
-	application = (struct iio_app_desc *)no_os_calloc(1, sizeof(*application));
+	application = (struct iio_app_desc *)zephyr_calloc(1, sizeof(*application));
 	if (!application)
 		return -ENOMEM;
 
@@ -343,7 +343,7 @@ int iio_app_init(struct iio_app_desc **app,
 	iio_init_param.uart_desc = uart_desc;
 #endif
 
-	iio_init_devs = no_os_calloc(app_init_param.nb_devices, sizeof(*iio_init_devs));
+	iio_init_devs = zephyr_calloc(app_init_param.nb_devices, sizeof(*iio_init_devs));
 	if (!iio_init_devs) {
 		status = -ENOMEM;
 		goto error;
@@ -387,7 +387,7 @@ int iio_app_init(struct iio_app_desc **app,
 	if(status < 0)
 		goto error;
 
-	no_os_free(iio_init_devs);
+	zephyr_free(iio_init_devs);
 
 	*app = application;
 
@@ -396,11 +396,11 @@ error:
 	/** We might have to reinit UART, settings might have changed for IIO */
 	uart_setup(&uart_desc, &app_init_param.uart_init_params);
 error_uart:
-	no_os_free(application);
+	zephyr_free(application);
 
 	status = print_uart_error_message(&uart_desc,
 					  &app_init_param.uart_init_params, status);
-	no_os_uart_remove(uart_desc);
+	zephyr_uart_remove(uart_desc);
 
 	return status;
 }
@@ -447,7 +447,7 @@ int iio_app_remove(struct iio_app_desc *app)
 #endif
 
 	if (app->uart_desc) {
-		ret = no_os_uart_remove(app->uart_desc);
+		ret = zephyr_uart_remove(app->uart_desc);
 		if (ret)
 			return ret;
 	}
@@ -456,7 +456,7 @@ int iio_app_remove(struct iio_app_desc *app)
 	if (ret)
 		return ret;
 
-	no_os_free(app);
+	zephyr_free(app);
 
 	return 0;
 }

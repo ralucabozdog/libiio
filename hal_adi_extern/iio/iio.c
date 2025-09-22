@@ -46,14 +46,14 @@
 #include "iio_types.h"
 #include "iiod.h"
 #include "ctype.h"
-#include "no_os_util.h"
-#include "no_os_list.h"
+#include "zephyr_util.h"
+// #include "no_os_list.h"
 #include "no_os_error.h"
 #include "zephyr_uart.h"
-#include "no_os_uart.h"
+// #include "zephyr_uart.h"
 #include "no_os_error.h"
-#include "no_os_alloc.h"
-#include "no_os_circular_buffer.h"
+#include "zephyr_alloc.h"
+#include "zephyr_circular_buffer.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -161,7 +161,7 @@ struct iio_buffer_priv {
 	uint32_t		raw_buf_len;
 	/* Set when this devices has buffer */
 	bool			initalized;
-	/* Set when no_os_calloc was used to initalize cb.buf */
+	/* Set when zephyr_calloc was used to initalize cb.buf */
 	bool			allocated;
 };
 
@@ -239,23 +239,23 @@ static inline int32_t _pop_conn(struct iio_desc *desc, uint32_t *conn_id)
 {
 	uint32_t size;
 
-	no_os_cb_size(desc->conns, &size);
+	zephyr_cb_size(desc->conns, &size);
 	if (size < sizeof(uint32_t))
 		return -EAGAIN;
 
-	return no_os_cb_read(desc->conns, conn_id, sizeof(*conn_id));
+	return zephyr_cb_read(desc->conns, conn_id, sizeof(*conn_id));
 }
 
 static inline int32_t _push_conn(struct iio_desc *desc, uint32_t conn_id)
 {
-	return no_os_cb_write(desc->conns, &conn_id, sizeof(conn_id));
+	return zephyr_cb_write(desc->conns, &conn_id, sizeof(conn_id));
 }
 
 static inline int32_t _nb_active_conns(struct iio_desc *desc)
 {
 	uint32_t size;
 
-	no_os_cb_size(desc->conns, &size);
+	zephyr_cb_size(desc->conns, &size);
 
 	return size / sizeof(uint32_t);
 }
@@ -1174,20 +1174,20 @@ static int iio_open_dev(struct iiod_ctx *ctx, const char *device,
 	} else {
 		if (dev->buffer.allocated) {
 			/* Free in case iio_close_dev wasn't called to free it*/
-			no_os_free(dev->buffer.cb.buff);
+			zephyr_free(dev->buffer.cb.buff);
 			dev->buffer.allocated = 0;
 		}
 		buf_size = dev->buffer.public.size;
-		buf = (int8_t *)no_os_calloc(dev->buffer.public.size, sizeof(*buf));
+		buf = (int8_t *)zephyr_calloc(dev->buffer.public.size, sizeof(*buf));
 		if (!buf)
 			return -ENOMEM;
 		dev->buffer.allocated = 1;
 	}
 
-	ret = no_os_cb_cfg(&dev->buffer.cb, buf, buf_size);
+	ret = zephyr_cb_cfg(&dev->buffer.cb, buf, buf_size);
 	if (NO_OS_IS_ERR_VALUE(ret)) {
 		if (dev->buffer.allocated) {
-			no_os_free(dev->buffer.cb.buff);
+			zephyr_free(dev->buffer.cb.buff);
 			dev->buffer.allocated = 0;
 		}
 
@@ -1198,7 +1198,7 @@ static int iio_open_dev(struct iiod_ctx *ctx, const char *device,
 		ret = dev->dev_descriptor->pre_enable(dev->dev_instance, mask);
 		if (NO_OS_IS_ERR_VALUE(ret)) {
 			if (dev->buffer.allocated) {
-				no_os_free(dev->buffer.cb.buff);
+				zephyr_free(dev->buffer.cb.buff);
 				dev->buffer.allocated = 0;
 			}
 			return ret;
@@ -1237,7 +1237,7 @@ static int iio_close_dev(struct iiod_ctx *ctx, const char *device)
 
 	if (dev->buffer.allocated) {
 		/* Should something else be used to free internal strucutre */
-		no_os_free(dev->buffer.cb.buff);
+		zephyr_free(dev->buffer.cb.buff);
 		dev->buffer.allocated = 0;
 	}
 
@@ -1328,7 +1328,7 @@ static int iio_read_buffer(struct iiod_ctx *ctx, const char *device, char *buf,
 	if (!dev || !dev->buffer.initalized)
 		return -EINVAL;
 
-	ret = no_os_cb_size(&dev->buffer.cb, &size);
+	ret = zephyr_cb_size(&dev->buffer.cb, &size);
 #ifdef IIO_IGNORE_BUFF_OVERRUN_ERR
 #warning Buffer overrun error checking is disabled.
 	if (ret != -NO_OS_EOVERRUN)
@@ -1341,7 +1341,7 @@ static int iio_read_buffer(struct iiod_ctx *ctx, const char *device, char *buf,
 		return -EAGAIN;
 
 
-	ret = no_os_cb_read(&dev->buffer.cb, buf, bytes);
+	ret = zephyr_cb_read(&dev->buffer.cb, buf, bytes);
 #ifdef IIO_IGNORE_BUFF_OVERRUN_ERR
 	if (ret != -NO_OS_EOVERRUN)
 #endif
@@ -1372,13 +1372,13 @@ static int iio_write_buffer(struct iiod_ctx *ctx, const char *device,
 	if (!dev || !dev->buffer.initalized)
 		return -EINVAL;
 
-	ret = no_os_cb_size(&dev->buffer.cb, &size);
+	ret = zephyr_cb_size(&dev->buffer.cb, &size);
 	if (NO_OS_IS_ERR_VALUE(ret))
 		return ret;
 
 	available = dev->buffer.public.size - size;
 	bytes = no_os_min(available, bytes);
-	ret = no_os_cb_write(&dev->buffer.cb, buf, bytes);
+	ret = zephyr_cb_write(&dev->buffer.cb, buf, bytes);
 	if (NO_OS_IS_ERR_VALUE(ret))
 		return ret;
 
@@ -1393,9 +1393,9 @@ int iio_buffer_get_block(struct iio_buffer *buffer, void **addr)
 		return -EINVAL;
 
 	if (buffer->dir == IIO_DIRECTION_INPUT)
-		return no_os_cb_prepare_async_write(buffer->buf, buffer->size, addr, &size);
+		return zephyr_cb_prepare_async_write(buffer->buf, buffer->size, addr, &size);
 
-	return no_os_cb_prepare_async_read(buffer->buf, buffer->size, addr, &size);
+	return zephyr_cb_prepare_async_read(buffer->buf, buffer->size, addr, &size);
 }
 
 int iio_buffer_block_done(struct iio_buffer *buffer)
@@ -1404,9 +1404,9 @@ int iio_buffer_block_done(struct iio_buffer *buffer)
 		return -EINVAL;
 
 	if (buffer->dir == IIO_DIRECTION_INPUT)
-		return no_os_cb_end_async_write(buffer->buf);
+		return zephyr_cb_end_async_write(buffer->buf);
 
-	return no_os_cb_end_async_read(buffer->buf);
+	return zephyr_cb_end_async_read(buffer->buf);
 }
 
 /* Write to buffer iio_buffer.bytes_per_scan bytes from data */
@@ -1415,7 +1415,7 @@ int iio_buffer_push_scan(struct iio_buffer *buffer, void *data)
 	if (!buffer)
 		return -EINVAL;
 
-	return no_os_cb_write(buffer->buf, data, buffer->bytes_per_scan);
+	return zephyr_cb_write(buffer->buf, data, buffer->bytes_per_scan);
 }
 
 /* Read from buffer iio_buffer.bytes_per_scan bytes into data */
@@ -1426,7 +1426,7 @@ int iio_buffer_pop_scan(struct iio_buffer *buffer, void *data)
 
 	int ret;
 
-	ret = no_os_cb_read(buffer->buf, data, buffer->bytes_per_scan);
+	ret = zephyr_cb_read(buffer->buf, data, buffer->bytes_per_scan);
 
 	if (buffer->cyclic_info.is_cyclic) {
 		if (buffer->buf->read.idx == buffer->buf->write.idx)
@@ -1451,7 +1451,7 @@ static int32_t accept_network_clients(struct iio_desc *desc)
 			return ret;
 
 		data.conn = sock;
-		data.buf = no_os_calloc(1, IIOD_CONN_BUFFER_SIZE);
+		data.buf = zephyr_calloc(1, IIOD_CONN_BUFFER_SIZE);
 		data.len = IIOD_CONN_BUFFER_SIZE;
 
 		if (!data.buf) {
@@ -1473,7 +1473,7 @@ static int32_t accept_network_clients(struct iio_desc *desc)
 remove_conn:
 	iiod_conn_remove(desc->iiod, id, &data);
 free_buf:
-	no_os_free(data.buf);
+	zephyr_free(data.buf);
 close_socket:
 	socket_remove(sock);
 
@@ -1514,7 +1514,7 @@ int iio_step(struct iio_desc *desc)
 #if defined(NO_OS_NETWORKING) || defined(NO_OS_LWIP_NETWORKING)
 		iiod_conn_remove(desc->iiod, conn_id, &data);
 		socket_remove(data.conn);
-		no_os_free(data.buf);
+		zephyr_free(data.buf);
 #endif
 	} else {
 		_push_conn(desc, conn_id);
@@ -1762,7 +1762,7 @@ static int32_t iio_init_xml(struct iio_desc *desc)
 						NULL, -1);
 	}
 
-	desc->xml_desc = (char *)no_os_calloc(size + 1, sizeof(*desc->xml_desc));
+	desc->xml_desc = (char *)zephyr_calloc(size + 1, sizeof(*desc->xml_desc));
 	if (!desc->xml_desc)
 		return -ENOMEM;
 
@@ -1797,7 +1797,7 @@ static int32_t iio_init_devs(struct iio_desc *desc,
 	struct iio_device_init *ndev;
 
 	desc->nb_devs = n;
-	desc->devs = (struct iio_dev_priv *)no_os_calloc(desc->nb_devs,
+	desc->devs = (struct iio_dev_priv *)zephyr_calloc(desc->nb_devs,
 			sizeof(*desc->devs));
 	if (!desc->devs)
 		return -ENOMEM;
@@ -1846,7 +1846,7 @@ static int32_t iio_init_trigs(struct iio_desc *desc,
 	struct iio_trigger_init *trig_init_iter;
 
 	desc->nb_trigs = n;
-	desc->trigs = (struct iio_trig_priv *)no_os_calloc(desc->nb_trigs,
+	desc->trigs = (struct iio_trig_priv *)zephyr_calloc(desc->nb_trigs,
 			sizeof(*desc->trigs));
 	if (!desc->trigs)
 		return -ENOMEM;
@@ -1880,7 +1880,7 @@ int iio_init(struct iio_desc **desc, struct iio_init_param *init_param)
 	if (!desc || !init_param)
 		return -EINVAL;
 
-	ldesc = (struct iio_desc *)no_os_calloc(1, sizeof(*ldesc));
+	ldesc = (struct iio_desc *)zephyr_calloc(1, sizeof(*ldesc));
 	if (!ldesc)
 		return -ENOMEM;
 
@@ -1924,14 +1924,14 @@ int iio_init(struct iio_desc **desc, struct iio_init_param *init_param)
 	if (NO_OS_IS_ERR_VALUE(ret))
 		goto free_xml;
 
-	ret = no_os_cb_init(&ldesc->conns,
+	ret = zephyr_cb_init(&ldesc->conns,
 			    sizeof(uint32_t) * (IIOD_MAX_CONNECTIONS + 1));
 	if (NO_OS_IS_ERR_VALUE(ret))
 		goto free_iiod;
 
 	if (init_param->phy_type == USE_UART) {
-		ldesc->send = (int (*)())no_os_uart_write;
-		ldesc->recv = (int (*)())no_os_uart_read;
+		ldesc->send = (int (*)())zephyr_uart_write;
+		ldesc->recv = (int (*)())zephyr_uart_read;
 		ldesc->uart_desc = init_param->uart_desc;
 
 		struct iiod_conn_data data = {
@@ -1987,17 +1987,17 @@ free_pylink:
 	socket_remove(ldesc->server);
 #endif
 free_conns:
-	no_os_cb_remove(ldesc->conns);
+	zephyr_cb_remove(ldesc->conns);
 free_iiod:
 	iiod_remove(ldesc->iiod);
 free_xml:
-	no_os_free(ldesc->xml_desc);
+	zephyr_free(ldesc->xml_desc);
 free_trigs:
-	no_os_free(ldesc->trigs);
+	zephyr_free(ldesc->trigs);
 free_devs:
-	no_os_free(ldesc->devs);
+	zephyr_free(ldesc->devs);
 free_desc:
-	no_os_free(ldesc);
+	zephyr_free(ldesc);
 
 	return ret;
 }
@@ -2019,18 +2019,18 @@ int iio_remove(struct iio_desc *desc)
 	for (int i = 0; i < IIOD_MAX_CONNECTIONS; i++) {
 		ret = iiod_conn_remove(desc->iiod, i, &data);
 		if (!ret) {
-			no_os_free(data.buf);
+			zephyr_free(data.buf);
 			socket_remove(data.conn);
 		}
 	}
 	socket_remove(desc->server);
 #endif
-	no_os_cb_remove(desc->conns);
+	zephyr_cb_remove(desc->conns);
 	iiod_remove(desc->iiod);
-	no_os_free(desc->devs);
-	no_os_free(desc->trigs);
-	no_os_free(desc->xml_desc);
-	no_os_free(desc);
+	zephyr_free(desc->devs);
+	zephyr_free(desc->trigs);
+	zephyr_free(desc->xml_desc);
+	zephyr_free(desc);
 
 	return 0;
 }
