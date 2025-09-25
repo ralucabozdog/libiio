@@ -37,9 +37,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
 #include "no_os_delay.h"
-#include "no_os_util.h"
-#include "mxc_delay.h"
-#include "mxc_sys.h"
+
+#include <zephyr/kernel.h>
 
 // static volatile unsigned long long _system_ticks = 0;
 
@@ -52,15 +51,15 @@
 // 	_system_ticks++;
 // }
 
-// /**
-//  * @brief Generate microseconds delay.
-//  * @param usecs - Delay in microseconds.
-//  * @return None.
-//  */
-// void no_os_udelay(uint32_t usecs)
-// {
-// 	MXC_Delay(MXC_DELAY_USEC(usecs));
-// }
+/**
+ * @brief Generate microseconds delay.
+ * @param usecs - Delay in microseconds.
+ * @return None.
+ */
+void no_os_udelay(uint32_t usecs)
+{
+	k_sleep(K_USEC(usecs));
+}
 
 /**
  * @brief Generate miliseconds delay.
@@ -69,7 +68,7 @@
  */
 void no_os_mdelay(uint32_t msecs)
 {
-	MXC_Delay(MXC_DELAY_MSEC(msecs));
+	k_sleep(K_MSEC(msecs));
 }
 
 // /**
