@@ -599,7 +599,18 @@ elseif(NEED_LIBXML2)
 		"If you want to enable the XML backend, set WITH_XML_BACKEND=ON.")
 endif()
 
-if (WITH_LIBTINYIIOD)
+if (WITH_EXTERNAL_BACKEND)
+    # Use the host-side external backend for connecting to Zephyr devices
+    target_sources(iio PRIVATE host_zephyr_backend.c)
+endif()
+
+# if (WITH_LIBTINYIIOD)
+# 	set(NO_THREADS 1)
+# else()
+# 	set(NO_THREADS 0)
+# endif()
+
+if (WITH_LIBTINYIIOD OR NO_THREADS) 	#if (WITH_LIBTINYIIOD)		# 
 	target_sources(iio PRIVATE lock-dummy.c)
 elseif (WIN32)
 	target_sources(iio PRIVATE lock-windows.c)
@@ -687,7 +698,7 @@ if (WITH_LIBTINYIIOD)
 	add_subdirectory(tinyiiod)
 endif()
 
-if (((WITH_IIOD AND WITH_AIO) OR IIOD_CLIENT) AND NOT WITH_ZSTD)
+if (((WITH_IIOD AND WITH_AIO) OR (IIOD_CLIENT AND WITH_IIOD)) AND NOT WITH_ZSTD)
 	message(SEND_ERROR "Sorry, IIOD async. API requires ZSTD support.\n"
 		"Set WITH_ZSTD=ON to enable it.")
 endif()

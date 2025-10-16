@@ -1,5 +1,6 @@
 name: libiio
-build:
-  cmake: .
-  settings:
-    dts_root: .
+# Disable automatic build - we'll include sources manually
+# build:
+#   cmake: .
+#   settings:
+#     dts_root: .

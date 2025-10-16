@@ -485,6 +485,7 @@ int32_t iiod_io_wait_for_response(struct iiod_io *io)
 
 	while (!io->r_done) {
 		ret = iiod_io_cond_wait(io);
+		// io->r_done = true; /* TODO see what to do with indefinite waiting */
 		if (ret) {
 			iio_mutex_lock(priv->lock);
 			__iiod_io_cancel_unlocked(io);

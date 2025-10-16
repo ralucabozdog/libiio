@@ -206,7 +206,8 @@ static int iiod_client_exec_command(struct iiod_client *client, const char *cmd)
 	int resp;
 	ssize_t ret;
 
-	ret = iiod_client_write_all(client, cmd, strlen(cmd));
+	ret = iiod_client_write_all(client, cmd, 8);
+	// ret = iiod_client_write_all(client, cmd, strlen(cmd));
 	if (ret < 0)
 		return (int) ret;
 
@@ -285,20 +286,23 @@ struct iiod_client * iiod_client_new(const struct iio_context_params *params,
 	client->next_evstream_idx = (uint16_t)-1;
 
 	err = iiod_client_enable_binary(client);
+
+	printf("is binary comm = %u\n\nNO_THREADS = %u\n\n", iiod_client_uses_binary_interface(client), NO_THREADS);
+
 	if (err)
 		goto err_free_lock;
 
-	err = iiod_client_set_timeout(client, params->timeout_ms);
-	if (err)
-		goto err_free_responder;
+	// err = iiod_client_set_timeout(client, params->timeout_ms);
+	// if (err)
+		// goto err_free_responder;
 
 	return client;
 
-err_free_responder:
-	if (client->responder) {
-		iiod_client_cancel(client);
-		iiod_responder_destroy(client->responder);
-	}
+// err_free_responder:
+// 	if (client->responder) {
+// 		iiod_client_cancel(client);
+// 		iiod_responder_destroy(client->responder);
+// 	}
 err_free_lock:
 	iio_mutex_destroy(client->lock);
 err_free_client:
@@ -911,13 +915,15 @@ static const struct iiod_responder_ops iiod_client_ops = {
 
 static int iiod_client_enable_binary(struct iiod_client *client)
 {
-	int ret;
+	// int ret;
 
-	ret = iiod_client_exec_command(client, "BINARY\r\n");
+	// ret = iiod_client_exec_command(client, "BINARY\r\n");
 
-	/* If the BINARY command fail, don't create the responder */
-	if (ret != 0)
-		return 0;
+	// /* If the BINARY command fail, don't create the responder */
+	// if (ret != 0)
+	// 	return 0;
+
+	/* TODO for Zephyr with tinyiiod, only binary commands are expected - see tinyiiod.c call to binary_parse */
 
 	client->responder = iiod_responder_create(&iiod_client_ops, client);
 	if (!client->responder) {
@@ -1039,25 +1045,25 @@ iiod_client_create_context_private(struct iiod_client *client,
 				   unsigned int nb_ctx_attrs,
 				   bool zstd)
 {
-	const char *cmd = zstd ? "ZPRINT\r\n" : "PRINT\r\n";
+	const char *cmd = zstd ? "ZPRINT\r\n" : "\0\0\1\0\0\0\0\0\r\n"; //"PRINT\r\n";
 	struct iio_context *ctx = NULL;
-	unsigned int extra_char = !iiod_client_uses_binary_interface(client);
+	unsigned int extra_char = 0; //(iiod_client_uses_binary_interface(client) ? 0 : 1);
 	size_t xml_len, uri_len = sizeof("xml:") - 1;
 	char *xml;
 	int ret;
 
 	iio_mutex_lock(client->lock);
 	ret = iiod_client_exec_command(client, cmd);
-	if (ret == -EINVAL && zstd) {
-		/* If the ZPRINT command does not exist, try again
-		 * with the regular PRINT command. */
-		iio_mutex_unlock(client->lock);
+	// if (ret == -EINVAL && zstd) {
+	// 	/* If the ZPRINT command does not exist, try again
+	// 	 * with the regular PRINT command. */
+	// 	iio_mutex_unlock(client->lock);
 
-		return iiod_client_create_context_private(client,
-							  backend, description,
-							  ctx_attrs, ctx_values,
-							  nb_ctx_attrs, false);
-	}
+	// 	return iiod_client_create_context_private(client,
+	// 						  backend, description,
+	// 						  ctx_attrs, ctx_values,
+	// 						  nb_ctx_attrs, false);
+	// }
 	if (ret < 0)
 		goto out_unlock;
 

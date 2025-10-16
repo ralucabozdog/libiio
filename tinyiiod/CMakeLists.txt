@@ -3,6 +3,7 @@ project(tinyiiod C)
 
 add_library(tinyiiod STATIC
 	tinyiiod.c
+	zephiio.c
 	${CMAKE_SOURCE_DIR}/iiod/responder.c
 	${CMAKE_SOURCE_DIR}/iiod/rw.c
 )

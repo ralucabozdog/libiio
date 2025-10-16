@@ -11,6 +11,10 @@
 
 #include <iio/iio-lock.h>
 
+// #if WITH_ZSTD_EXT
+// #include <../../zstd/lib/zstd.h>
+// #endif
+
 #define container_of(ptr, type, member)	\
 	((type *)(void *)((uintptr_t)(ptr) - offsetof(type, member)))
 
@@ -77,4 +81,48 @@ int iiod_interpreter(struct iio_context *ctx,
 out_destroy_buflist_lock:
 	iio_mutex_destroy(buflist_lock);
 	return ret;
+}
+
+extern void *get_xml_zstd_data(const struct iio_context *ctx, size_t *out_len)
+{
+	char *xml = iio_context_get_xml(ctx);
+	size_t len, xml_len = strlen(xml);
+	void *buf;
+#if WITH_ZSTD_EXT
+	size_t ret;
+	char *bytes;
+	size_t i;
+
+	len = ZSTD_compressBound(xml_len);
+	buf = malloc(len);
+	if (!buf) {
+		free(xml);
+		return NULL;
+	}
+
+	ret = ZSTD_compress(buf, len, xml, xml_len, 1);
+	free(xml);
+	fprintf(stderr, "ZSTD_compress returned %d\n", ret);
+
+	if (ZSTD_isError(ret)) {
+		// IIO_WARNING("Unable to compress XML string: %s\n",
+		// 	    ZSTD_getErrorName(ret));
+		fprintf(stderr, "Showing data (buf) from failed compression: \n");
+		bytes = (char *)buf;
+		for (i = 0; i < len; i++) {
+			fprintf(stderr, "%02X",bytes[i]);
+		}
+		fprintf(stderr, "\n");
+
+		free(buf);
+		return NULL;
+	}
+
+	*out_len = ret;
+#else
+	buf = xml;
+	*out_len = xml_len;
+#endif
+
+	return buf;
 }

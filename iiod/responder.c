@@ -161,7 +161,7 @@ static void handle_read_attr(struct parser_pdata *pdata,
 {
 	struct iiod_io *io = iiod_command_get_default_io(cmd_data);
 	ssize_t ret = -EINVAL;
-	char buf[0x10000];
+	char buf[0x100]; /* TODO !!!!! too lage buffer => stack overflow */
 	const struct iio_attr *attr;
 	struct iiod_buf iiod_buf;
 
@@ -1208,10 +1208,17 @@ static ssize_t iiod_write(void *d, const struct iiod_buf *buf, size_t nb)
 	return write_all(d, buf->ptr, buf->size);
 }
 
+static ssize_t iiod_discard(void *d, size_t nb)
+{
+	/* TODO */
+	return nb;
+}
+
 static const struct iiod_responder_ops iiod_responder_ops = {
 	.cmd	= iiod_cmd,
 	.read	= iiod_read,
 	.write	= iiod_write,
+	.discard = iiod_discard,
 };
 
 static void iiod_responder_free_resources(struct parser_pdata *pdata)
