@@ -11,9 +11,9 @@
 
 #include <iio/iio-lock.h>
 
-// #if WITH_ZSTD_EXT
-// #include <../../zstd/lib/zstd.h>
-// #endif
+#if WITH_ZSTD
+#include <../../zstd/lib/zstd.h>
+#endif
 
 #define container_of(ptr, type, member)	\
 	((type *)(void *)((uintptr_t)(ptr) - offsetof(type, member)))
@@ -88,7 +88,8 @@ extern void *get_xml_zstd_data(const struct iio_context *ctx, size_t *out_len)
 	char *xml = iio_context_get_xml(ctx);
 	size_t len, xml_len = strlen(xml);
 	void *buf;
-#if WITH_ZSTD_EXT
+	
+#if WITH_ZSTD
 	size_t ret;
 	char *bytes;
 	size_t i;

@@ -55,40 +55,23 @@ const char* xml_ad7768 =
 "  </device>\n"
 "</context>\n";
 
-// struct iio_context_pdata {
-// 	struct sp_port *port;
-// 	struct iiod_client *iiod_client;
-
-// 	struct iio_context_params params;
-
-// 	bool shutdown;
-// };
-
 static struct iio_context*
 zephiio_create_context(const struct iio_context_params *params, const char *args);
 
+static char arr[100] = "alaportocala";
 
 static ssize_t zephyr_read_attr(const struct iio_attr *attr, char *dst, size_t len)
 {
-	/* TODO */
-
-	// const struct iio_device *dev = iio_attr_get_device(attr);
-	// const struct iio_context *ctx = iio_device_get_context(dev);
-	// struct iio_context_pdata *pdata = iio_context_get_pdata(ctx);
-
-	// return iiod_client_attr_read(pdata->iiod_client, attr, dst, len);
-
-	strcpy(dst, "alabala");
-
-	return 7;
+	strncpy(dst, arr, len);
+	dst[len] = 0;
+	return len;
 }
 
 static ssize_t zephyr_write_attr(const struct iio_attr *attr, const char *src, size_t len)
 {
-	/* TODO */
-	// printk("New attribute value:\r\n");
-
-	return 0;
+	strncpy(arr, src, len);
+	arr[len] = 0;
+	return len;
 }
 
 static void zephyr_shutdown(struct iio_context *ctx)
@@ -150,7 +133,7 @@ const struct iio_backend_ops zephyr_ops = {
 extern const struct iio_backend iio_external_backend = {
 	.name = "zephyr",
 	.api_version = IIO_BACKEND_API_V1,
-	.default_timeout_ms = 0,
+	.default_timeout_ms = 1000,
 	.uri_prefix = "zephyr:",
 	.ops = &zephyr_ops,
 };
@@ -160,63 +143,6 @@ const struct iio_data_format frmt = {
 	.bits = 16,
 	.is_signed = true,
 };
-
-
-// static struct iio_context*
-// zephiio_create_context(const struct iio_context_params *params, const char *args)
-// {
-//     printk("Hello from zephiio_create_context\n");
-
-//     struct iio_context *ctx;
-//     char* description = "Zephyr backend draft";
-
-//     ctx = iio_context_create_from_backend(params, &iio_external_backend, description, 1, 2, "bla_bla");
-
-// 	if (iio_err(ctx))
-// 		return iio_err_cast(ctx);
-
-
-//     struct iio_device* dev0 = iio_context_add_device(ctx, "iio:device0", "ad7768", NULL);
-
-// 	if(iio_err(dev0))
-// 		return iio_err_cast(dev0);
-
-// 	printk("Added device: %s\n", dev0->name);
-
-
-// 	struct iio_channel* dev0_ch0 = iio_device_add_channel(dev0, 0, "voltage0", "ad7768_in_ch0", "label_name", false, true, &frmt);
-
-// 	if(iio_err(dev0_ch0))
-// 		return iio_err_cast(dev0_ch0);
-
-// 	printk("Added channel: %s\n", dev0_ch0->name);
-
-		
-// 	int ret = iio_channel_add_attr(dev0_ch0, "adc_channel_attr", "in_voltage0_adc_channel_attr");
-// 	if (ret)
-// 		return iio_ptr(ret);
-
-
-// 	struct iio_channel * dev0ch1 = iio_device_add_channel(dev0, 1, "voltage1", "ad7768_in_ch1", "different_label_name", false, true, &frmt);
-// 	ret = iio_err(dev0ch1);
-// 	if (ret)
-// 		return iio_err_cast(dev0ch1);
-
-// 	ret = iio_channel_add_attr(dev0ch1, "adc_channel_attr", "in_voltage1_adc_channel_attr");
-// 	if (ret)
-// 		return iio_ptr(ret);
-
-// 	ret = iio_device_add_attr(dev0, "adc_global_attr", IIO_ATTR_TYPE_DEVICE);
-// 	if (ret)
-// 		return iio_ptr(ret);
-
-// 	ret = iio_device_add_attr(dev0, "direct_reg_access", IIO_ATTR_TYPE_DEBUG);
-// 	if (ret)
-// 		return iio_ptr(ret);
-
-
-//     return ctx;
-// }
 
 static struct iio_context*
 zephiio_create_context(const struct iio_context_params *params, const char *args)
@@ -281,170 +207,3 @@ zephiio_create_context(const struct iio_context_params *params, const char *args
 end:
 	return iio_ptr(ret);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// #include <zephiio.h>
-// #include <stdlib.h>
-
-// static const struct iio_context_params default_params = {
-// 	.timeout_ms = 0,
-
-// 	.out = NULL, /* stdout */
-// 	.err = NULL, /* stderr */
-// 	.log_level = (enum iio_log_level)DEFAULT_LOG_LEVEL,
-// 	.stderr_level = LEVEL_WARNING,
-// 	.timestamp_level = LEVEL_DEBUG,
-// };
-
-// static struct iio_context *
-// local_create_context(const struct iio_context_params *params, const char *args);
-
-// static const struct iio_backend_ops local_ops = {
-// 	.create = local_create_context,
-// };
-
-// const struct iio_backend iio_local_backend = {
-// 	.api_version = IIO_BACKEND_API_V1,
-// 	.name = "local",
-// 	.uri_prefix = "local:",
-// 	.ops = &local_ops,
-// 	.default_timeout_ms = 1000,
-// };
-
-// const struct iio_backend * const iio_backends[] = {
-// 	&iio_local_backend,
-// };
-// const unsigned int iio_backends_size = 1;
-
-// struct iio_context * iio_create_context(const struct iio_context_params *params,
-// 					const char *uri)
-// {
-// 	struct iio_context_params params2 = { 0 };
-// 	const struct iio_backend *backend = NULL;
-// 	struct iio_context *ctx = NULL;
-// 	char *uri_dup = NULL;
-// 	unsigned int i;
-// 	int err;
-
-// 	if (params)
-// 		params2 = *params;
-
-// 	if (!params2.log_level)
-// 		params2.log_level = default_params.log_level;
-// 	if (!params2.stderr_level)
-// 		params2.stderr_level = default_params.stderr_level;
-// 	if (!params2.timestamp_level)
-// 		params2.timestamp_level = default_params.timestamp_level;
-
-// 	if (!uri) {
-// 		//uri_dup = iio_getenv("IIOD_REMOTE");
-
-// 		uri = uri_dup ? uri_dup : "local:";
-// 	}
-
-// 	for (i = 0; !backend && i < iio_backends_size; i++) {
-// 		if (!iio_backends[i])
-// 			continue;
-
-// 		if (!strncmp(uri, iio_backends[i]->uri_prefix,
-// 			     strlen(iio_backends[i]->uri_prefix))) {
-// 			backend = iio_backends[i];
-// 		}
-// 	}
-
-// 	if (backend) {
-// 		if (!params2.timeout_ms)
-// 			params2.timeout_ms = backend->default_timeout_ms;
-
-// 		ctx = backend->ops->create(&params2,
-// 					   uri + strlen(backend->uri_prefix));
-// 	} 
-//     // else if (WITH_MODULES) {
-// 	// 	ctx = iio_create_dynamic_context(&params2, uri);
-// 	// } else {
-// 	// 	ctx = iio_ptr(-ENOSYS);
-// 	// }
-
-// 	free(uri_dup);
-
-// 	// if (!iio_err(ctx)) {
-// 	// 	err = iio_context_update_scale_offset(ctx);
-// 	// 	if (err) {
-// 	// 		iio_context_destroy(ctx);
-// 	// 		ctx = iio_ptr(err);
-// 	// 	}
-// 	// }
-
-// 	return ctx;
-// }
-
-// static struct iio_context *
-// local_create_context(const struct iio_context_params *params, const char *args)
-// {
-// 	struct iio_context *ctx;
-	
-//     printk("Pam pam din local_create_context\n");
-
-// 	return ctx;
-// }
-
-// int functie(int a)
-// {
-//     return a + 1;
-// }

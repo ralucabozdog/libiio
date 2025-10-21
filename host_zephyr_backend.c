@@ -95,12 +95,6 @@ static char parity_char(enum sp_parity pc);
 
 static char flow_char(enum sp_flowcontrol fc);
 
-// /* Wrapper to make iiod_client_new_binary visible to debugger */
-// static struct iiod_client* zephyr_create_binary_client(
-//     const struct iio_context_params *params,
-//     struct iiod_client_pdata *desc,
-//     const struct iiod_client_ops *ops);
-
 static const struct iiod_client_ops zephyr_iiod_client_ops = {
 	.write = zephyr_write_data,
 	.read = zephyr_read_data,
@@ -475,8 +469,8 @@ static ssize_t zephyr_read_data(struct iiod_client_pdata *io_data,
 		sp_ret = sp_nonblocking_read(pdata->port, buf, len);
 		ret = (ssize_t) libserialport_to_errno(sp_ret);
 
-        if (ret)
-            printf("Read returned %li: %hhu -> %c\n", (long) ret, buf[0], buf[0]);
+        // if (ret)
+        //     printf("Read returned %li: %hhu -> %c\n", (long) ret, buf[0], buf[0]);
 
 		if (ret || pdata->shutdown)
 			break;
@@ -521,25 +515,22 @@ static char parity_char(enum sp_parity pc)
 static ssize_t
 zephyr_read_attr_val(const struct iio_attr *attr, char *dst, size_t len)
 {
-	// const struct iio_device *dev = iio_attr_get_device(attr);
-	// const struct iio_context *ctx = iio_device_get_context(dev);
-	// struct iio_context_pdata *pdata = iio_context_get_pdata(ctx);
+	const struct iio_device *dev = iio_attr_get_device(attr);
+	const struct iio_context *ctx = iio_device_get_context(dev);
+	struct iio_context_pdata *pdata = iio_context_get_pdata(ctx);
 
-	// return iiod_client_attr_read(pdata->iiod_client, attr, dst, len);
-
-    strcpy(dst, "alabala");
-    return 7;
+	return iiod_client_attr_read(pdata->iiod_client, attr, dst, len);
 }
 
-// /* Wrapper to make iiod_client_new_binary visible to debugger */
-// static struct iiod_client* zephyr_create_binary_client(
-//     const struct iio_context_params *params,
-//     struct iiod_client_pdata *desc,
-//     const struct iiod_client_ops *ops)
-// {
-//     /* Call the library function */
-//     return iiod_client_new_binary(params, desc, ops);
-// }
+static ssize_t
+zephyr_write_attr_val(const struct iio_attr *attr, const char *src, size_t len)
+{
+	const struct iio_device *dev = iio_attr_get_device(attr);
+	const struct iio_context *ctx = iio_device_get_context(dev);
+	struct iio_context_pdata *pdata = iio_context_get_pdata(ctx);
+
+	return iiod_client_attr_write(pdata->iiod_client, attr, src, len);
+}
 
 /* ==================================================================== */
 /*                               Variables                              */
@@ -548,13 +539,14 @@ zephyr_read_attr_val(const struct iio_attr *attr, char *dst, size_t len)
 static const struct iio_backend_ops zephyr_ops = {
     .create = zephyr_create_context_from_args,
     .read_attr = zephyr_read_attr_val,
+    .write_attr = zephyr_write_attr_val,
 };
 
 // This is the external backend symbol that libiio will look for
 const struct iio_backend iio_external_backend = {
     .name = "zephyr",
     .api_version = IIO_BACKEND_API_V1,
-    .default_timeout_ms = 0,
+    .default_timeout_ms = 1000,
     .uri_prefix = "zephyr:",
     .ops = &zephyr_ops,
 };

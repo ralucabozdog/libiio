@@ -45,7 +45,7 @@ void iiod_set_event(struct iio_event_stream *stream,
 		    const struct iio_event *event,
 		    int err_code_or_zero);
 
-// void *get_xml_zstd_data(const struct iio_context *ctx, 
-// 			size_t *out_len);
+void *get_xml_zstd_data(const struct iio_context *ctx, 
+			size_t *out_len);
 
 #endif /* __LIBTINYIIOD_H__ */
