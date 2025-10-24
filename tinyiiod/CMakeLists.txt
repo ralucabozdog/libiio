@@ -1,21 +1,24 @@
-cmake_minimum_required(VERSION 3.13)
-project(tinyiiod C)
+set(TINYIIOD_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../modules/lib/libiio/tinyiiod)
 
 add_library(tinyiiod STATIC
-	tinyiiod.c
-	zephiio.c
-	${CMAKE_SOURCE_DIR}/iiod/responder.c
-	${CMAKE_SOURCE_DIR}/iiod/rw.c
+	${TINYIIOD_ROOT}/tinyiiod.c
+	${TINYIIOD_ROOT}/zephiio.c
+	${TINYIIOD_ROOT}/../iiod/responder.c
+	${TINYIIOD_ROOT}/../iiod/rw.c
 )
-target_include_directories(tinyiiod PRIVATE
-	${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}
+target_include_directories(tinyiiod
+	PRIVATE
+		${CMAKE_CURRENT_BINARY_DIR}
+		${TINYIIOD_ROOT}/../iiod
+		${TINYIIOD_ROOT}/..
+	PUBLIC
+		${CMAKE_CURRENT_SOURCE_DIR}
+		${TINYIIOD_ROOT}/../include
 )
+
 set_target_properties(tinyiiod PROPERTIES
-	VERSION ${LIBIIO_VERSION_MAJOR}.${LIBIIO_VERSION_MINOR}
-	SOVERSION ${LIBIIO_VERSION_MAJOR}
 	PUBLIC_HEADER tinyiiod.h
 	C_STANDARD 99
 	C_STANDARD_REQUIRED ON
 	C_EXTENSIONS OFF
 )
-target_link_libraries(tinyiiod LINK_PRIVATE iio iio_common_config iiod-responder)
