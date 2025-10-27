@@ -286,7 +286,7 @@ struct iiod_client * iiod_client_new(const struct iio_context_params *params,
 
 	err = iiod_client_enable_binary(client);
 
-	printf("is binary comm = %u\n\nNO_THREADS = %u\n\n", iiod_client_uses_binary_interface(client), NO_THREADS);
+	printf("is binary comm = %u\n\nNO_THREADS = %u\n\nWITH_ZSTD = %u\n\n", iiod_client_uses_binary_interface(client), NO_THREADS, WITH_ZSTD);
 
 	if (err)
 		goto err_free_lock;
@@ -933,7 +933,7 @@ static int iiod_client_enable_binary(struct iiod_client *client)
 	return 0;
 }
 
-#if WITH_ZSTD
+// #if WITH_ZSTD
 static int iiod_client_send_print(struct iiod_client *client,
 				  void *buf, size_t buf_len)
 {
@@ -975,12 +975,13 @@ iiod_client_create_context_private_new(struct iiod_client *client,
 	xml_len = ret;
 
 	is_zstd = strncmp(xml, "xml:<?xml", sizeof("xml:<?xml") - 1) != 0;
-	if (is_zstd)
+	if (is_zstd && WITH_ZSTD)
 		prm_dbg(client->params, "Received ZSTD-compressed XML string.\n");
 	else
 		prm_dbg(client->params, "Received uncompressed XML string.\n");
 
 	if (is_zstd) {
+		#if WITH_ZSTD
 		len = ZSTD_getFrameContentSize(&xml[uri_len], xml_len);
 		if (len == ZSTD_CONTENTSIZE_UNKNOWN ||
 		    len == ZSTD_CONTENTSIZE_ERROR) {
@@ -1009,6 +1010,7 @@ iiod_client_create_context_private_new(struct iiod_client *client,
 		/* Free compressed data, make "xml" point to uncompressed data */
 		free(xml);
 		xml = xml_zstd;
+		#endif
 	}
 
 	prm_dbg(client->params, "Creating context\n");
@@ -1033,7 +1035,7 @@ out_free_xml:
 	free(xml);
 	return ctx ? ctx : iio_ptr(ret);
 }
-#endif
+// #endif
 
 static struct iio_context *
 iiod_client_create_context_private(struct iiod_client *client,
@@ -1150,7 +1152,7 @@ struct iio_context * iiod_client_create_context(struct iiod_client *client,
 						const char **ctx_values,
 						unsigned int nb_ctx_attrs)
 {
-	if (!WITH_ZSTD || !iiod_client_uses_binary_interface(client))
+	if (!iiod_client_uses_binary_interface(client))
 		return iiod_client_create_context_private(client, backend,
 							  description,
 							  ctx_attrs, ctx_values,
@@ -1158,11 +1160,11 @@ struct iio_context * iiod_client_create_context(struct iiod_client *client,
 							  WITH_ZSTD);
 
 
-#if WITH_ZSTD
+// #if WITH_ZSTD
 	return iiod_client_create_context_private_new(client, backend,
 						      description, ctx_attrs,
 						      ctx_values, nb_ctx_attrs);
-#endif
+// #endif
 }
 
 static struct iiod_client_io *
