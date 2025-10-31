@@ -599,18 +599,13 @@ elseif(NEED_LIBXML2)
 		"If you want to enable the XML backend, set WITH_XML_BACKEND=ON.")
 endif()
 
-if (WITH_EXTERNAL_BACKEND)
-    # Use the host-side external backend for connecting to Zephyr devices
-    target_sources(iio PRIVATE host_zephyr_backend.c)
+if (WITH_LIBTINYIIOD)
+	set(NO_THREADS 1)
+else()
+	set(NO_THREADS 0)
 endif()
 
-# if (WITH_LIBTINYIIOD)
-# 	set(NO_THREADS 1)
-# else()
-# 	set(NO_THREADS 0)
-# endif()
-
-if (WITH_LIBTINYIIOD OR NO_THREADS) 	#if (WITH_LIBTINYIIOD)		# 
+if (WITH_LIBTINYIIOD)
 	target_sources(iio PRIVATE lock-dummy.c)
 elseif (WIN32)
 	target_sources(iio PRIVATE lock-windows.c)
