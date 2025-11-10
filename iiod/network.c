@@ -6,7 +6,7 @@
  * Author: Paul Cercueil <paul.cercueil@analog.com>
  */
 
-#include "../iio-config.h"
+// #include "../iio-config.h" // Force-included by CMake
 #include "debug.h"
 #include "dns-sd.h"
 #include "ops.h"
@@ -36,7 +36,7 @@
 #define IP_ADDR_LEN (INET_ADDRSTRLEN + 1 + IF_NAMESIZE)
 #endif
 
-static const int dft_socket_flags = WITH_AIO ? 0 : SOCK_NONBLOCK;
+static const int dft_socket_flags = WITH_AIO ? 0 : 0; /* SOCK_NONBLOCK not available in Zephyr */
 
 static struct sockaddr_in sockaddr = {
 	.sin_family = AF_INET,
@@ -167,8 +167,8 @@ static void network_main(struct thread_pool *pool, void *d)
 		if (pfd[1].revents & POLLIN) /* STOP event */
 			break;
 
-		new = accept4(fd, (struct sockaddr *) &caddr, &addr_len,
-			      dft_socket_flags);
+		new = accept(fd, (struct sockaddr *) &caddr, &addr_len);
+		/* Note: accept4() with SOCK_NONBLOCK not available in Zephyr */
 		if (new == -1) {
 			if (errno == EAGAIN || errno == EINTR)
 				continue;

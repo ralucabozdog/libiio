@@ -50,10 +50,10 @@
 
 #ifdef _WIN32
 #define close(s) closesocket(s)
+#endif
 
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
-#endif
 #endif
 
 #define NETWORK_TIMEOUT_MS 5000
@@ -458,14 +458,21 @@ network_create_buffer(const struct iio_device *dev,
 	buf->io_ctx.ctx_pdata = pdata;
 	buf->dev = dev;
 
-	buf->iiod_client = network_setup_iiod_client(dev, &buf->io_ctx);
-	ret = iio_err(buf->iiod_client);
-	if (ret) {
-		dev_perror(dev, ret, "Unable to create IIOD client");
-		goto err_free_buf;
-	}
+	// /* TODO: The second call to create_context messes stuff - 
+	// TO BE SEEN HOW IT IS DONE IN SERIAL (THIS PART OF THE CODE IS MISSING IN THE SERIAL IMPLEMENTATION - why????) */
 
-	buf->pdata = iiod_client_create_buffer(buf->iiod_client,
+	// buf->iiod_client = network_setup_iiod_client(dev, &buf->io_ctx);
+	// ret = iio_err(buf->iiod_client);
+	// if (ret) {
+	// 	dev_perror(dev, ret, "Unable to create IIOD client");
+	// 	goto err_free_buf;
+	// }
+
+	// buf->pdata = iiod_client_create_buffer(buf->iiod_client,
+	// 				       pdata->iiod_client,
+	// 				       dev, buffer_params, mask);
+
+	buf->pdata = iiod_client_create_buffer(pdata->iiod_client,
 					       pdata->iiod_client,
 					       dev, buffer_params, mask);
 	ret = iio_err(buf->pdata);
@@ -477,9 +484,9 @@ network_create_buffer(const struct iio_device *dev,
 	return buf;
 
 err_free_iiod_client:
-	network_cancel_buffer(buf);
-	network_free_iiod_client(buf->iiod_client, &buf->io_ctx);
-err_free_buf:
+	// network_cancel_buffer(buf);
+	// network_free_iiod_client(buf->iiod_client, &buf->io_ctx);
+// err_free_buf:
 	free(buf);
 	return iio_ptr(ret);
 }
@@ -513,31 +520,31 @@ network_open_events_fd(const struct iio_device *dev)
 }
 
 static const struct iio_backend_ops network_ops = {
-	.scan = IF_ENABLED(HAVE_DNS_SD, dnssd_context_scan),
+	.scan = NULL, /* DNS-SD disabled: IF_ENABLED(HAVE_DNS_SD, dnssd_context_scan) */
 	.create = network_create_context,
 	.read_attr = network_read_attr,
 	.write_attr = network_write_attr,
 	.get_trigger = network_get_trigger,
-	.set_trigger = network_set_trigger,
+	// .set_trigger = network_set_trigger,
 	.shutdown = network_shutdown,
 	.set_timeout = network_set_timeout,
 
 	.create_buffer = network_create_buffer,
 	.free_buffer = network_free_buffer,
-	.enable_buffer = network_enable_buffer,
-	.cancel_buffer = network_cancel_buffer,
+	// .enable_buffer = network_enable_buffer,
+	// .cancel_buffer = network_cancel_buffer,
 
-	.readbuf = network_readbuf,
-	.writebuf = network_writebuf,
+	// .readbuf = network_readbuf,
+	// .writebuf = network_writebuf,
 
-	.create_block = network_create_block,
-	.free_block = iiod_client_free_block,
-	.enqueue_block = iiod_client_enqueue_block,
-	.dequeue_block = iiod_client_dequeue_block,
+	// .create_block = network_create_block,
+	// .free_block = iiod_client_free_block,
+	// .enqueue_block = iiod_client_enqueue_block,
+	// .dequeue_block = iiod_client_dequeue_block,
 
 	.open_ev = network_open_events_fd,
 	.close_ev = iiod_client_close_event_stream,
-	.read_ev = iiod_client_read_event,
+	// .read_ev = iiod_client_read_event,
 };
 
 __api_export_if(WITH_NETWORK_BACKEND_DYNAMIC)
@@ -650,7 +657,7 @@ static struct iio_context * network_create_context(const struct iio_context_para
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
-	if (HAVE_DNS_SD && (!host || !host[0])) {
+	if (0 && (!host || !host[0])) { /* HAVE_DNS_SD disabled */
 		char addr_str[DNS_SD_ADDRESS_STR_MAX];
 
 		ret = dnssd_discover_host(params, addr_str,
@@ -686,7 +693,7 @@ static struct iio_context * network_create_context(const struct iio_context_para
 		 * which might be not the case for some minimalist distros. In this case,
 		 * as a last resort, let's try to resolve the host with avahi...
 		 */
-		if (HAVE_DNS_SD && ret) {
+		if (0 && ret) { /* HAVE_DNS_SD disabled */
 			char addr_str[DNS_SD_ADDRESS_STR_MAX];
 
 			prm_dbg(params, "'getaddrinfo()' failed: %s. Trying dnssd as a last resort...\n",

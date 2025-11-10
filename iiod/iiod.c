@@ -6,7 +6,7 @@
  * Author: Paul Cercueil <paul.cercueil@analog.com>
  */
 
-#include "../iio-config.h"
+/* #include "../iio-config.h" */
 #include "debug.h"
 #include "ops.h"
 #include "thread-pool.h"
@@ -392,7 +392,11 @@ out_destroy_context:
 	return ret;
 }
 
+#ifdef __ZEPHYR__
+int poll_nointr(struct zvfs_pollfd *pfd, unsigned int num_pfd)
+#else
 int poll_nointr(struct pollfd *pfd, unsigned int num_pfd)
+#endif
 {
 	int ret;
 

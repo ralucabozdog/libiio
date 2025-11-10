@@ -425,7 +425,7 @@ static void handle_create_buffer(struct parser_pdata *pdata,
 	for (i = 0; i < nb_words; i++)
 		entry->words[i] = ntohl(params->mask[i]);
 
-	free(params);
+	// free(params); /* TODO: it is deallocated here, but it is still used at the end of this function in the call to iiod_io_send_response */
 
 	/* Create a temporary mask object */
 	mask = iio_create_channels_mask(nb_channels);
@@ -502,6 +502,9 @@ static void handle_create_buffer(struct parser_pdata *pdata,
 
 	/* Send the success code + updated mask back */
 	iiod_io_send_response(io, data.size, &data, 1);
+
+	/* TODO params should only be freed here. Otherwise, wrong value sent by board to client as response to the cmd opcode IIOD_OP_CREATE_BUFFER */
+	free(params);
 	return;
 
 err_destroy_lock:

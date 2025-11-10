@@ -6,7 +6,7 @@
  * Author: Paul Cercueil <paul.cercueil@analog.com>
  */
 
-#include "../iio-config.h"
+/* #include "../iio-config.h" */
 #include "debug.h"
 #include "ops.h"
 #include "thread-pool.h"
@@ -123,7 +123,7 @@ static ssize_t readfd_io(struct parser_pdata *pdata, void *dest, size_t len)
 	struct pollfd pfd[2];
 
 	pfd[0].fd = pdata->fd_in;
-	pfd[0].events = POLLIN | POLLRDHUP;
+	pfd[0].events = POLLIN | POLLHUP; /* POLLRDHUP not available in Zephyr */
 	pfd[0].revents = 0;
 	pfd[1].fd = thread_pool_get_poll_fd(pdata->pool);
 	pfd[1].events = POLLIN;
@@ -133,7 +133,7 @@ static ssize_t readfd_io(struct parser_pdata *pdata, void *dest, size_t len)
 		poll_nointr(pfd, 2);
 
 		/* Got STOP event, or client closed the socket: treat it as EOF */
-		if (pfd[1].revents & POLLIN || pfd[0].revents & POLLRDHUP)
+		if (pfd[1].revents & POLLIN || pfd[0].revents & POLLHUP) /* POLLRDHUP not available in Zephyr */
 			return 0;
 		if (pfd[0].revents & POLLERR)
 			return -EIO;
@@ -142,7 +142,7 @@ static ssize_t readfd_io(struct parser_pdata *pdata, void *dest, size_t len)
 
 		do {
 			if (pdata->fd_in_is_socket)
-				ret = recv(pdata->fd_in, dest, len, MSG_NOSIGNAL);
+				ret = recv(pdata->fd_in, dest, len, 0); /* MSG_NOSIGNAL not available in Zephyr */
 			else
 				ret = read(pdata->fd_in, dest, len);
 		} while (ret == -1 && errno == EINTR);
@@ -182,7 +182,7 @@ static ssize_t writefd_io(struct parser_pdata *pdata, const void *src, size_t le
 
 		do {
 			if (pdata->fd_out_is_socket)
-				ret = send(pdata->fd_out, src, len, MSG_NOSIGNAL);
+				ret = send(pdata->fd_out, src, len, 0); /* MSG_NOSIGNAL not available in Zephyr */
 			else
 				ret = write(pdata->fd_out, src, len);
 		} while (ret == -1 && errno == EINTR);

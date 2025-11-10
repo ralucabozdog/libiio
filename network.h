@@ -12,6 +12,12 @@
 
 #include <stdbool.h>
 
+#ifdef __ZEPHYR__
+#include <zephyr/posix/netdb.h>
+#else
+#include <netdb.h>
+#endif
+
 #define FQDN_LEN (255)              /* RFC 1035 */
 
 struct iio_context_params;

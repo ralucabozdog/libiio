@@ -20,6 +20,11 @@
 #include <string.h>
 #include <unistd.h>
 
+#ifdef __ZEPHYR__
+#include <sys/types.h>
+#include <zephyr/sys/fdtable.h>
+#endif
+
 #if WITH_AIO
 #include <libaio.h>
 #endif
@@ -189,6 +194,10 @@ static __inline__ void output(struct parser_pdata *pdata, const char *text)
 		pdata->stop = true;
 }
 
+#ifdef __ZEPHYR__
+int poll_nointr(struct zvfs_pollfd *pfd, unsigned int num_pfd);
+#else
 int poll_nointr(struct pollfd *pfd, unsigned int num_pfd);
+#endif
 
 #endif /* __OPS_H__ */

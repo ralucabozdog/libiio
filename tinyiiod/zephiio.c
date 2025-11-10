@@ -2,6 +2,7 @@
 #include <iio-private.h>
 #include <errno.h>
 #include <string.h>
+#include <network.h>
 
 const char* xml_ad7768 = 
 "<?xml version=\"1.0\"?>\n"
@@ -64,14 +65,14 @@ static ssize_t zephyr_read_attr(const struct iio_attr *attr, char *dst, size_t l
 {
 	strncpy(dst, arr, len);
 	dst[len] = 0;
-	return len;
+	return strlen(arr) + 1;
 }
 
 static ssize_t zephyr_write_attr(const struct iio_attr *attr, const char *src, size_t len)
 {
 	strncpy(arr, src, len);
 	arr[len] = 0;
-	return len;
+	return strlen(arr) + 1;
 }
 
 static void zephyr_shutdown(struct iio_context *ctx)
@@ -96,26 +97,63 @@ static int zephyr_set_timeout(struct iio_context *ctx, unsigned int timeout)
 	return 0;
 }
 
+struct iio_buffer_pdata {
+	struct iiod_client_pdata io_ctx;
+	struct iiod_client_buffer_pdata *pdata;
+
+	const struct iio_device *dev;
+	struct iiod_client *iiod_client;
+};
+
 static struct iio_buffer_pdata *
 zephyr_create_buffer(const struct iio_device *dev,
 			struct iio_buffer_params *params,
 			struct iio_channels_mask *mask)
 {
-	struct iio_buffer_pdata *pdata = malloc(10 /* arbitrary, backend specific */);
+	struct iio_buffer_pdata *pdata = malloc(sizeof(struct iio_buffer_pdata));
 	if (!pdata)
-		return iio_ptr(-ENOMEM);
+		return iio_ptr(pdata);
 	
 	return pdata;
 }
 
 void zephyr_free_buffer(struct iio_buffer_pdata *pdata)
 {
-	free(pdata);
+	if (pdata)
+		free(pdata);
 }
 
 const struct iio_device * zephyr_get_trigger(const struct iio_device *dev)
 {
-	return iio_ptr(-ENODEV);
+	struct iio_device *trig = malloc(sizeof(struct iio_device));
+	if (!trig)
+		return iio_ptr(trig);
+	return trig;
+}
+
+struct iio_event_stream_pdata {
+	struct iiod_client *client;
+	const struct iio_device *dev;
+	struct iio_event event;
+	struct iiod_io *io;
+	uint16_t idx;
+};
+
+struct iio_event_stream_pdata * zephyr_open_ev(const struct iio_device *dev)
+{
+	struct iio_event_stream_pdata * pdata = malloc(sizeof(struct iio_event_stream_pdata));
+
+	if (!pdata)
+		return iio_err(pdata);
+
+	pdata->dev = dev;
+
+	return pdata;
+}
+
+void zephyr_close_ev(struct iio_event_stream_pdata *pdata)
+{
+	free(pdata);
 }
 
 const struct iio_backend_ops zephyr_ops = {
@@ -128,12 +166,14 @@ const struct iio_backend_ops zephyr_ops = {
 	.create_buffer = zephyr_create_buffer,
 	.free_buffer = zephyr_free_buffer,
 	.get_trigger = zephyr_get_trigger,
+	.open_ev = zephyr_open_ev,
+	.close_ev = zephyr_close_ev,
 };
 
 extern const struct iio_backend iio_external_backend = {
 	.name = "zephyr",
 	.api_version = IIO_BACKEND_API_V1,
-	.default_timeout_ms = 1000,
+	.default_timeout_ms = 5000,
 	.uri_prefix = "zephyr:",
 	.ops = &zephyr_ops,
 };

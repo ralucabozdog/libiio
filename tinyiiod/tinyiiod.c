@@ -12,7 +12,7 @@
 #include <iio/iio-lock.h>
 
 #if WITH_ZSTD
-#include <../../zstd/lib/zstd.h>
+#include <zstd.h>
 #endif
 
 #define container_of(ptr, type, member)	\
