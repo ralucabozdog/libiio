@@ -458,23 +458,24 @@ network_create_buffer(const struct iio_device *dev,
 	buf->io_ctx.ctx_pdata = pdata;
 	buf->dev = dev;
 
-	// /* TODO: The second call to create_context messes stuff - 
-	// TO BE SEEN HOW IT IS DONE IN SERIAL (THIS PART OF THE CODE IS MISSING IN THE SERIAL IMPLEMENTATION - why????) */
+	/* Multiple-client capable server needed */
 
-	// buf->iiod_client = network_setup_iiod_client(dev, &buf->io_ctx);
-	// ret = iio_err(buf->iiod_client);
-	// if (ret) {
-	// 	dev_perror(dev, ret, "Unable to create IIOD client");
-	// 	goto err_free_buf;
-	// }
+	buf->iiod_client = network_setup_iiod_client(dev, &buf->io_ctx);
+	ret = iio_err(buf->iiod_client);
+	if (ret) {
+		dev_perror(dev, ret, "Unable to create IIOD client");
+		goto err_free_buf;
+	}
 
-	// buf->pdata = iiod_client_create_buffer(buf->iiod_client,
+	buf->pdata = iiod_client_create_buffer(buf->iiod_client,
+					       pdata->iiod_client,
+					       dev, buffer_params, mask);
+
+	/* Single-client capable server implementation */
+	// buf->pdata = iiod_client_create_buffer(pdata->iiod_client,
 	// 				       pdata->iiod_client,
 	// 				       dev, buffer_params, mask);
 
-	buf->pdata = iiod_client_create_buffer(pdata->iiod_client,
-					       pdata->iiod_client,
-					       dev, buffer_params, mask);
 	ret = iio_err(buf->pdata);
 	if (ret) {
 		dev_perror(dev, ret, "Unable to create buffer");
@@ -484,9 +485,9 @@ network_create_buffer(const struct iio_device *dev,
 	return buf;
 
 err_free_iiod_client:
-	// network_cancel_buffer(buf);
-	// network_free_iiod_client(buf->iiod_client, &buf->io_ctx);
-// err_free_buf:
+	network_cancel_buffer(buf);
+	network_free_iiod_client(buf->iiod_client, &buf->io_ctx);
+err_free_buf:
 	free(buf);
 	return iio_ptr(ret);
 }
