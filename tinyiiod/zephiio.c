@@ -123,6 +123,12 @@ void zephyr_free_buffer(struct iio_buffer_pdata *pdata)
 		free(pdata);
 }
 
+int zephyr_enable_buffer(struct iio_buffer_pdata *pdata,
+			     size_t nb_samples, bool enable, bool cyclic)
+{
+	return 0;
+}
+
 const struct iio_device * zephyr_get_trigger(const struct iio_device *dev)
 {
 	struct iio_device *trig = malloc(sizeof(struct iio_device));
@@ -156,6 +162,66 @@ void zephyr_close_ev(struct iio_event_stream_pdata *pdata)
 	free(pdata);
 }
 
+struct iio_block_pdata {
+	struct iio_buffer_pdata *buf;
+	struct iio_block_impl_pdata *pdata;
+	size_t size;
+	void *data;
+	bool dequeued;
+	bool cpu_access_disabled;
+};
+
+struct iio_block_pdata * zephyr_create_block(struct iio_buffer_pdata *pdata,
+						size_t size, void **data)
+{
+	struct iio_block_pdata * block_pdata = malloc(sizeof(struct iio_block_pdata));
+
+	if (!block_pdata)
+		return iio_ptr(block_pdata);
+
+	block_pdata->size = size;
+
+	block_pdata->data = malloc(size);
+	if (!block_pdata->data)
+		return -ENOMEM;
+
+	*data = block_pdata->data;
+	
+	return block_pdata;
+}
+
+void zephyr_free_block(struct iio_block_pdata *pdata)
+{
+	free(pdata);
+}
+
+int zephyr_enqueue_block(struct iio_block_pdata *pdata,
+			     size_t bytes_used, bool cyclic)
+{
+	return 0;
+}
+
+int zephyr_dequeue_block(struct iio_block_pdata *pdata, bool nonblock)
+{
+	char *samples = (char *)pdata->data;
+	size_t num_samples = pdata->size;
+
+	for (size_t i = 0; i < num_samples; i++) {
+		samples[i] = 'a' + i;
+	}
+
+	return 0;
+}
+
+/* Only for legacy - not called in rwdev, only in readdev */
+ssize_t zephyr_readbuf(struct iio_buffer_pdata *pdata,
+			   void *dst, size_t len)
+{
+	strncpy((char*)dst, arr, len);
+	((char*)dst)[len] = 0;
+	return strlen(arr) + 1;
+}
+
 const struct iio_backend_ops zephyr_ops = {
 	.create = zephiio_create_context,
 	.read_attr = zephyr_read_attr,
@@ -165,9 +231,15 @@ const struct iio_backend_ops zephyr_ops = {
 	.set_timeout = zephyr_set_timeout,
 	.create_buffer = zephyr_create_buffer,
 	.free_buffer = zephyr_free_buffer,
+	.enable_buffer = zephyr_enable_buffer,
+	.readbuf = zephyr_readbuf,
 	.get_trigger = zephyr_get_trigger,
 	.open_ev = zephyr_open_ev,
 	.close_ev = zephyr_close_ev,
+	.create_block = zephyr_create_block,
+	.free_block = zephyr_free_block,
+	.enqueue_block = zephyr_enqueue_block,
+	.dequeue_block = zephyr_dequeue_block,
 };
 
 extern const struct iio_backend iio_external_backend = {

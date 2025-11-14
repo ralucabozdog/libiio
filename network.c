@@ -532,16 +532,16 @@ static const struct iio_backend_ops network_ops = {
 
 	.create_buffer = network_create_buffer,
 	.free_buffer = network_free_buffer,
-	// .enable_buffer = network_enable_buffer,
+	.enable_buffer = network_enable_buffer,
 	// .cancel_buffer = network_cancel_buffer,
 
-	// .readbuf = network_readbuf,
+	.readbuf = network_readbuf,
 	// .writebuf = network_writebuf,
 
-	// .create_block = network_create_block,
-	// .free_block = iiod_client_free_block,
-	// .enqueue_block = iiod_client_enqueue_block,
-	// .dequeue_block = iiod_client_dequeue_block,
+	.create_block = network_create_block,
+	.free_block = iiod_client_free_block,
+	.enqueue_block = iiod_client_enqueue_block,
+	.dequeue_block = iiod_client_dequeue_block,
 
 	.open_ev = network_open_events_fd,
 	.close_ev = iiod_client_close_event_stream,
