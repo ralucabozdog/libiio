@@ -526,17 +526,17 @@ static const struct iio_backend_ops network_ops = {
 	.read_attr = network_read_attr,
 	.write_attr = network_write_attr,
 	.get_trigger = network_get_trigger,
-	// .set_trigger = network_set_trigger,
+	.set_trigger = network_set_trigger,
 	.shutdown = network_shutdown,
 	.set_timeout = network_set_timeout,
 
 	.create_buffer = network_create_buffer,
 	.free_buffer = network_free_buffer,
 	.enable_buffer = network_enable_buffer,
-	// .cancel_buffer = network_cancel_buffer,
+	.cancel_buffer = network_cancel_buffer,
 
 	.readbuf = network_readbuf,
-	// .writebuf = network_writebuf,
+	.writebuf = network_writebuf,
 
 	.create_block = network_create_block,
 	.free_block = iiod_client_free_block,
@@ -545,7 +545,7 @@ static const struct iio_backend_ops network_ops = {
 
 	.open_ev = network_open_events_fd,
 	.close_ev = iiod_client_close_event_stream,
-	// .read_ev = iiod_client_read_event,
+	.read_ev = iiod_client_read_event,
 };
 
 __api_export_if(WITH_NETWORK_BACKEND_DYNAMIC)

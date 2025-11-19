@@ -59,7 +59,7 @@ const char* xml_ad7768 =
 static struct iio_context*
 zephiio_create_context(const struct iio_context_params *params, const char *args);
 
-static char arr[100] = "alaportocala";
+static char arr[100] = {"alaportocala"};
 
 static ssize_t zephyr_read_attr(const struct iio_attr *attr, char *dst, size_t len)
 {
@@ -198,6 +198,10 @@ void zephyr_free_block(struct iio_block_pdata *pdata)
 int zephyr_enqueue_block(struct iio_block_pdata *pdata,
 			     size_t bytes_used, bool cyclic)
 {
+	printf("Buffer message sent to device\n");
+	for (int i = 0; i < bytes_used; i++)
+		printf("%02x ", ((char*)pdata->data)[i]);
+	printf("\n");
 	return 0;
 }
 
@@ -207,7 +211,7 @@ int zephyr_dequeue_block(struct iio_block_pdata *pdata, bool nonblock)
 	size_t num_samples = pdata->size;
 
 	for (size_t i = 0; i < num_samples; i++) {
-		samples[i] = 'a' + i;
+		samples[i] = '0' + i % 10;
 	}
 
 	return 0;
@@ -222,6 +226,44 @@ ssize_t zephyr_readbuf(struct iio_buffer_pdata *pdata,
 	return strlen(arr) + 1;
 }
 
+ssize_t zephyr_writebuf(struct iio_buffer_pdata *pdata,
+			    const void *src, size_t len)
+{
+	for (int i = 0; i < len; i++)
+		printf("%c", arr[i]);
+
+	strncpy(arr, src, len);
+	arr[len] = 0;
+	return strlen(arr) + 1;	
+}
+
+void zephyr_cancel_buffer(struct iio_buffer_pdata *pdata)
+{
+	return;
+}
+
+int zephyr_set_trigger(const struct iio_device *dev,
+			const struct iio_device *trigger)
+{
+	if (!dev || !trigger || !iio_device_is_trigger(trigger))
+		return -EINVAL;
+	
+	return 0;
+}
+
+int zephyr_read_ev(struct iio_event_stream_pdata *pdata,
+		       struct iio_event *out_event,
+		       bool nonblock)
+{
+	out_event->id = ((uint64_t)IIO_EV_TYPE_THRESH << 56) |	// Event type: threshold
+					((uint64_t)0 << 55) |					// Not differential
+					((uint64_t)IIO_EV_DIR_RISING << 48) |	// Direction: rising
+					((uint64_t)IIO_NO_MOD << 40) |			// No modifier
+					((uint64_t)IIO_VOLTAGE << 32) |			// Channel type: voltage
+					((uint64_t)0);							// Channel ID: 0 (for voltage0)
+	out_event->timestamp = k_uptime_get();
+}
+
 const struct iio_backend_ops zephyr_ops = {
 	.create = zephiio_create_context,
 	.read_attr = zephyr_read_attr,
@@ -232,10 +274,14 @@ const struct iio_backend_ops zephyr_ops = {
 	.create_buffer = zephyr_create_buffer,
 	.free_buffer = zephyr_free_buffer,
 	.enable_buffer = zephyr_enable_buffer,
+	.cancel_buffer = zephyr_cancel_buffer,
 	.readbuf = zephyr_readbuf,
+	.writebuf = zephyr_writebuf,
 	.get_trigger = zephyr_get_trigger,
+	.set_trigger = zephyr_set_trigger,
 	.open_ev = zephyr_open_ev,
 	.close_ev = zephyr_close_ev,
+	.read_ev = zephyr_read_ev,
 	.create_block = zephyr_create_block,
 	.free_block = zephyr_free_block,
 	.enqueue_block = zephyr_enqueue_block,
@@ -312,6 +358,51 @@ zephiio_create_context(const struct iio_context_params *params, const char *args
 		return iio_ptr(ret);
 
 	ret = iio_device_add_attr(d0, "direct_reg_access", IIO_ATTR_TYPE_DEBUG);
+	if (ret)
+		return iio_ptr(ret);
+
+	
+	/* DAC added as device1 */
+
+	struct iio_device * d1 = iio_context_add_device(ctx, "iio:device1", "dac_demo", NULL);
+	ret = iio_err(d1);
+	if (ret)
+		return iio_err_cast(d1);
+	
+	struct iio_channel * d1c0 = iio_device_add_channel(d1, 0, "voltage_out0", "dac_out_ch0", "label", true,
+		       true, &fmt);
+	ret = iio_err(d1c0);
+	if (ret)
+		return iio_err_cast(d1c0);
+
+	ret = iio_channel_add_attr(d1c0, "dac_channel_attr", "out_voltage0_dac_channel_attr");
+	if (ret)
+		return iio_ptr(ret);
+	struct iio_channel * d1c1 = iio_device_add_channel(d1, 1, "voltage_out1", "dac_out_ch1", "label", true,
+		       true, &fmt);
+	ret = iio_err(d1c1);
+	if (ret)
+		return iio_err_cast(d1c1);
+
+	ret = iio_channel_add_attr(d1c1, "dac_channel_attr", "out_voltage1_dac_channel_attr");
+	if (ret)
+		return iio_ptr(ret);
+
+	ret = iio_device_add_attr(d1, "dac_global_attr", IIO_ATTR_TYPE_DEVICE);
+	if (ret)
+		return iio_ptr(ret);
+
+	ret = iio_device_add_attr(d1, "direct_reg_access", IIO_ATTR_TYPE_DEBUG);
+	if (ret)
+		return iio_ptr(ret);	
+
+	/* Trigger */
+	struct iio_device * t0 = iio_context_add_device(ctx, "trigger0", "trigger0", NULL);
+	ret = iio_err(t0);
+	if (ret)
+		return iio_ptr(t0);
+
+	ret = iio_device_add_attr(t0, "sampling_frequency", IIO_ATTR_TYPE_DEVICE);
 	if (ret)
 		return iio_ptr(ret);
 
