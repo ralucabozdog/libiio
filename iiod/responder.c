@@ -174,7 +174,7 @@ static void handle_read_attr(struct parser_pdata *pdata,
 {
 	struct iiod_io *io = iiod_command_get_default_io(cmd_data);
 	ssize_t ret = -EINVAL;
-	char buf[0x10000];
+	char buf[0x100];
 	const struct iio_attr *attr;
 	struct iiod_buf iiod_buf;
 
