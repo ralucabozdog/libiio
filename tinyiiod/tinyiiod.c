@@ -59,22 +59,29 @@ int iiod_interpreter(struct iio_context *ctx,
 		.write_cb = write_cb,
 		.pdata = pdata,
 	};
-	int ret;
+	int ret = 0;
 
-	buflist_lock = iio_mutex_create();
-	ret = iio_err(buflist_lock);
-	if (ret)
-		return ret;
+	/* Create global locks once on first call, never destroy them */
+	if (!buflist_lock) {
+		buflist_lock = iio_mutex_create();
+		ret = iio_err(buflist_lock);
+		if (ret)
+			return ret;
+	}
 
-	evlist_lock = iio_mutex_create();
-	ret = iio_err(evlist_lock);
-	if (ret)
-		goto out_destroy_buflist_lock;
+	if (!evlist_lock) {
+		evlist_lock = iio_mutex_create();
+		ret = iio_err(evlist_lock);
+		if (ret)
+			return ret;
+	}
 
 	binary_parse(&iiod_ctx.parser_pdata);
 
-	iio_mutex_destroy(evlist_lock);
-out_destroy_buflist_lock:
-	iio_mutex_destroy(buflist_lock);
+	/* TODO - where should the mutex destroy functions be called
+				so as not to mess with the parallel execution of multiple clients */
+	// 	iio_mutex_destroy(evlist_lock);
+	// out_destroy_buflist_lock:
+	// 	iio_mutex_destroy(buflist_lock);
 	return ret;
 }
