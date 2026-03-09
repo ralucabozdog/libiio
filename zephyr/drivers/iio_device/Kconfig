@@ -23,4 +23,17 @@ config LIBIIO_IIO_DEVICE_ADC_INIT_PRIORITY
 	help
 	  Initialization priority of the Zephyr ADC iio device driver class.
 
+config LIBIIO_IIO_DEVICE_THERMOCOUPLE
+	bool "Thermocouple driver"
+	default y
+	help
+	  Enable the Zephyr Thermocouple iio device driver class.
+
+config LIBIIO_IIO_DEVICE_THERMOCOUPLE_INIT_PRIORITY
+	int "Thermocouple driver init priority"
+	default KERNEL_INIT_PRIORITY_DEVICE
+	depends on LIBIIO_IIO_DEVICE_THERMOCOUPLE
+	help
+	  Initialization priority of the Zephyr Thermocouple iio device driver class.
+
 endif # LIBIIO_IIO_DEVICE

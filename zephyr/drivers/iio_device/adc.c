@@ -23,7 +23,9 @@ struct iio_device_adc_data {
 };
 
 static const char *const gain_name = "gain";
-static const char *const sample_name = "sample";
+static const char *const sample_name = "raw";
+static const char *const sample_freq = "sampling_frequency";
+static const char *const scale_name = "scale";
 
 static const char *const gain_values[] = {
 	[ADC_GAIN_1_6] = "1/6",
@@ -89,8 +91,17 @@ static int iio_device_adc_add_channels(const struct device *dev,
 			LOG_ERR("Could not add channel %d attribute %s", index, sample_name);
 			return -EINVAL;
 		}
-	}
 
+		if (iio_channel_add_attr(iio_channel, sample_freq, filename)) {
+			LOG_ERR("Could not add channel %d attribute %s", index, sample_freq);
+			return -EINVAL;
+		}
+
+		if (iio_channel_add_attr(iio_channel, scale_name, filename)) {
+			LOG_ERR("Could not add channel %d attribute %s", index, scale_name);
+			return -EINVAL;
+		}
+	}
 	return 0;
 }
 
@@ -154,6 +165,48 @@ static int iio_device_adc_read_channel_sample(const struct device *dev,
 	return sample_len + 1;
 }
 
+static char* sampling = "100000";
+
+static int iio_device_adc_read_sampling_frequency(const struct device *dev, 
+	int index, char *dst, size_t len)
+{
+	const char *gain_value = sampling;
+	int gain_len;
+
+	gain_len = strlen(gain_value) + 1;
+
+	if (len < gain_len) {
+		LOG_ERR("Buffer size %u is too small for sampling frequency value, need %u",
+		len, gain_len);
+		return -ENOMEM;
+	}
+
+	strcpy(dst, gain_value);
+
+	return gain_len;
+}
+
+static char* scale = "1";
+
+static int iio_device_adc_read_channel_scale(const struct device *dev,
+	int index, char *dst, size_t len)
+{
+	const char *gain_value = scale;
+	int gain_len;
+
+	gain_len = strlen(gain_value) + 1;
+
+	if (len < gain_len) {
+		LOG_ERR("Buffer size %u is too small for scale value, need %u",
+		len, gain_len);
+		return -ENOMEM;
+	}
+
+	strcpy(dst, gain_value);
+
+	return gain_len;
+}
+
 static int iio_device_adc_write_channel_gain(const struct device *dev,
 		int index, const char *src, size_t len)
 {
@@ -186,6 +239,10 @@ static int iio_device_adc_read_attr(const struct device *dev,
 		return iio_device_adc_read_channel_gain(dev, index, dst, len);
 	} else if (!strcmp(attr->name, sample_name)) {
 		return iio_device_adc_read_channel_sample(dev, index, dst, len);
+	} else if (!strcmp(attr->name, sample_freq)) {
+		return iio_device_adc_read_sampling_frequency(dev, index, dst, len);
+	} else if (!strcmp(attr->name, scale_name)) {
+		return iio_device_adc_read_channel_scale(dev, index, dst, len);
 	}
 
 	LOG_ERR("Invalid attr");
@@ -214,6 +271,17 @@ static int iio_device_adc_write_attr(const struct device *dev,
 
 static int iio_device_adc_init(const struct device *dev)
 {
+	const struct iio_device_adc_config *config = dev->config;
+	int ret;
+
+	for (int i = 0; i < config->num_channels; i++) {
+		ret = adc_channel_setup_dt(&config->channels[i]);
+		if (ret < 0) {
+			LOG_ERR("Could not setup channel %d (%d)", i, ret);
+			return ret;
+		}
+	}
+
 	return 0;
 }
 

@@ -3,11 +3,18 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-if(eval_ad4052_ardz IN_LIST SHIELD)
-  set(EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
+# if(eval_ad4052_ardz IN_LIST SHIELD)
+#   set(EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
+# else()
+#   set(EXTRA_DTC_OVERLAY_FILE adc-emul.overlay)
+#   set(EXTRA_CONF_FILE adc-emul.conf)
+# endif()
+
+if(NOT ad_apardpfw_sl IN_LIST SHIELD)
+    set(EXTRA_DTC_OVERLAY_FILE apard32690_max32690_m4.overlay)
+    set(EXTRA_CONF_FILE apard32690_max32690_m4.conf)
 else()
-  set(EXTRA_DTC_OVERLAY_FILE adc-emul.overlay)
-  set(EXTRA_CONF_FILE adc-emul.conf)
+    set(EXTRA_CONF_FILE ad_apardpfw_sl.conf)
 endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
