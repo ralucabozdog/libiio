@@ -1,0 +1,39 @@
+/*
+ * Copyright (c) 2025 Analog Devices, Inc.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include <zephyr/dt-bindings/adc/ad7124-adc.h>
+#include <zephyr/dt-bindings/gpio/adi-max32-gpio.h>
+
+/ {
+	iio-context {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+        ad7124-8 {
+			compatible = "iio,thermocouple";
+			io-channels = <&ad7124_eval_cn0391_ardz 0>, <&ad7124_eval_cn0391_ardz 1>, <&ad7124_eval_cn0391_ardz 2>,
+							<&ad7124_eval_cn0391_ardz 3>, <&ad7124_eval_cn0391_ardz 4>, <&ad7124_eval_cn0391_ardz 5>,
+							<&ad7124_eval_cn0391_ardz 6>, <&ad7124_eval_cn0391_ardz 7>, <&ad7124_eval_cn0391_ardz 9>;
+			io-channel-names = "ad7124_ch0", "ad7124_ch1", "ad7124_ch2",
+								"ad7124_ch3", "ad7124_ch4", "ad7124_ch5",
+								"ad7124_ch6", "ad7124_ch7", "ad7124_ch9";
+			io-name = "thermocouple";
+		};
+	};
+};
+
+arduino_spi: &spi1 {
+		status = "okay";
+};
+
+/* Swap SPI3 and SPI4 assignments for RevE */
+pmod_spi: &spi3 {
+    pinctrl-0 = <&spi3a_miso_p0_20 &spi3a_mosi_p0_21 &spi3a_sck_p0_16
+                 &spi3a_ss0_p0_19>;
+    pinctrl-names = "default";
+};
+
+/delete-node/ &spi3;
