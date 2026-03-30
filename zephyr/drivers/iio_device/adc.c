@@ -465,6 +465,11 @@ static int iio_device_adc_write_channel_differential(const struct device *dev,
 	return ret;
 }
 
+static int iio_device_adc_read_buffer_length()
+{
+	return 0;
+}
+
 static int iio_device_adc_read_attr(const struct device *dev,
 		const struct iio_device *iio_device, const struct iio_attr *attr,
 		char *dst, size_t len)
