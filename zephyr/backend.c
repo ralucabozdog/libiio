@@ -71,6 +71,8 @@ int zephyr_set_trigger(const struct iio_device *dev,
 	return 0;
 }
 
+static const char *const buf_name = "buffer0";
+
 static struct iio_context *
 zephyr_create_context(const struct iio_context_params *params, const char *args)
 {
