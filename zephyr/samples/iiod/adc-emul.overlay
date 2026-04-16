@@ -12,6 +12,7 @@
 				io-channels = <&adc_emul 0>, <&adc_emul 1>;
 				io-channel-names = "voltage0", "voltage1";
 				io-name = "adc-emul";
+				buffer-name = "buffer0";
 			};
 		};
 	};
@@ -36,6 +37,7 @@
 			zephyr,reference = "ADC_REF_INTERNAL";
 			zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 			zephyr,resolution = <10>;
+			zephyr,vref-mv = <3300>;
 		};
 
 		channel@1 {
@@ -44,6 +46,7 @@
 			zephyr,reference = "ADC_REF_INTERNAL";
 			zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 			zephyr,resolution = <10>;
+			zephyr,vref-mv = <3300>;
 		};
 	};
 };

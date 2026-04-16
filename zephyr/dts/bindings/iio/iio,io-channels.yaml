@@ -12,3 +12,8 @@ properties:
     required: true
   io-channel-names:
     required: true
+  buffer-name:
+    type: string
+    description: |
+      Name of the buffer attribute for this IIO device.
+      If not specified, defaults to "buffer".
