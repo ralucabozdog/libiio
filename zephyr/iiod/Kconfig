@@ -68,20 +68,22 @@ config LIBIIO_IIOD_UART_THREAD_STACK_SIZE
 
 config LIBIIO_IIOD_UART_RX_BUF_SIZE
 	int "RX buffer size"
-	default 256
+	default 2048
 	help
 	  Size of the ring buffer for storing data received from the UART
 	  device before it can be processed by the iiod server. Must be
 	  large enough to hold a full command and its payload data that
 	  may arrive in a single burst (e.g. write_attr sends an 8-byte
 	  header + 8-byte length + attribute value).
+	  Currently, set to larger to support rwdev large sample values.
 
 config LIBIIO_IIOD_UART_TX_BUF_SIZE
 	int "TX buffer size"
-	default 16
+	default 2048
 	help
 	  Size of the ring buffer for storing data written by the iiod server
 	  before it can be transmitted by the UART device.
+	  Currently, set to larger to support rwdev large sample values.
 
 endif # LIBIIO_IIOD_UART
 
