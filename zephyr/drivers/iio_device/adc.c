@@ -501,7 +501,7 @@ static int iio_device_adc_read_attr(const struct device *dev,
 			return iio_device_adc_int_ref_voltage_read(dev, dst, len);
 		}
 		break;
-	case IIO_ATTR_TYPE_DEVICE:
+	case IIO_ATTR_TYPE_BUFFER:
 		dst[0] = '\0';
 		return 1;
 	default:
