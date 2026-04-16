@@ -11,10 +11,32 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/iterable_sections.h>
 #include <iio/iio.h>
+#include <iio_trigger_node.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct iio_buffer_pdata {
+	const struct device *zephyr_dev;
+	const struct iio_device *iio_dev;
+	struct iio_channels_mask *mask;
+	bool enabled;
+	struct k_mutex lock;
+	size_t sample_size;
+	struct iio_trigger_node node;
+	struct iio_trigger_list pending_blocks;
+};
+
+struct iio_block_pdata {
+	struct iio_trigger_node node;
+	struct iio_buffer_pdata *buf_pdata;
+	void *data;
+	size_t size;
+	size_t bytes_used;
+	bool cyclic;
+	struct k_sem ready_sem;
+};
 
 struct iio_device_info {
 	const char *name;
