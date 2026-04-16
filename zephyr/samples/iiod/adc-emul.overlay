@@ -14,6 +14,7 @@
 			reg = <1>;
 			io-channels = <&adc_emul 0>, <&adc_emul 1>;
 			io-channel-names = "adc_emul_in_ch0", "adc_emul_in_ch1";
+			buffer-name = "buffer0";
 		};
 	};
 
@@ -37,6 +38,7 @@
 			zephyr,reference = "ADC_REF_INTERNAL";
 			zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 			zephyr,resolution = <10>;
+			zephyr,vref-mv = <3300>;
 		};
 
 		channel@1 {
@@ -45,6 +47,7 @@
 			zephyr,reference = "ADC_REF_INTERNAL";
 			zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
 			zephyr,resolution = <10>;
+			zephyr,vref-mv = <3300>;
 		};
 	};
 };

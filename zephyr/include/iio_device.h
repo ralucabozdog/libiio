@@ -62,10 +62,13 @@ typedef int (*iio_device_write_attr_t)(const struct device *dev,
 		const struct iio_device *iio_device, const struct iio_attr *attr,
 		const char *src, size_t len);
 
+typedef const char *(*iio_device_get_buffer_name_t)(const struct device *dev);
+
 __subsystem struct iio_device_driver_api {
 	iio_device_add_channels_t add_channels;
 	iio_device_read_attr_t read_attr;
 	iio_device_write_attr_t write_attr;
+	iio_device_get_buffer_name_t get_buffer_name;
 };
 
 __syscall int iio_device_add_channels(const struct device *dev,
@@ -111,6 +114,19 @@ static inline int z_impl_iio_device_write_attr(const struct device *dev,
 	}
 
 	return api->write_attr(dev, iio_device, attr, src, len);
+}
+
+__syscall const char *iio_device_get_buffer_name(const struct device *dev);
+
+static inline const char *z_impl_iio_device_get_buffer_name(const struct device *dev)
+{
+	const struct iio_device_driver_api *api = DEVICE_API_GET(iio_device, dev);
+
+	if (api->get_buffer_name == NULL) {
+		return "buffer";
+	}
+
+	return api->get_buffer_name(dev);
 }
 
 #ifdef __cplusplus

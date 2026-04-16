@@ -42,6 +42,7 @@ struct iio_device_io_channels_config {
 	const struct iio_device_io_channels_channel *channels;
 	size_t num_channels;
 	uint8_t address;
+	const char *buffer_name;
 };
 
 struct iio_device_io_channels_channel_adc_overrides {
@@ -122,20 +123,50 @@ static int iio_device_io_channels_add_channels(const struct device *dev,
 	const struct iio_device_io_channels_config *config = dev->config;
 	struct iio_channel *iio_channel;
 
-	bool scan_element = false;
+	bool scan_element = true;
 	const char *name = NULL;
 	const char *label = NULL;
 	const char *filename = NULL;
-	const struct iio_data_format fmt = {
-		.length = 16,
-		.bits = 16,
-		.is_signed = true,
-	};
 	char id[32];
 	int index;
 
 	for (index = 0; index < config->num_channels; index++) {
 		bool output = config->channels[index].type == IO_CHANNEL_TYPE_DAC;
+		bool is_signed;
+		int scale_resolution;
+		struct iio_data_format fmt;
+
+		if (config->channels[index].type == IO_CHANNEL_TYPE_ADC) {
+			const struct adc_dt_spec *ch = &config->channels[index].adc;
+
+			is_signed = ch->channel_cfg_dt_node_exists
+				  ? ch->channel_cfg.differential : 0;
+			scale_resolution = ch->resolution - (is_signed ? 1 : 0);
+			fmt = (struct iio_data_format){
+				.length = (ch->resolution / 8 + (ch->resolution % 8 != 0)) * 8,
+				.bits = ch->resolution,
+				.is_signed = is_signed,
+				.with_scale = true,
+				.scale = ((double)ch->vref_mv)
+					/ (double)(1u << scale_resolution),
+				.is_be = true,
+			};
+		} else {
+			const struct dac_dt_spec *ch = &config->channels[index].dac;
+
+			fmt = (struct iio_data_format){
+				.length = (ch->channel_cfg.resolution / 8 + (ch->channel_cfg.resolution % 8 != 0)) * 8,
+				.bits = ch->channel_cfg.resolution,
+				.is_signed = false,
+				.with_scale = (ch->vref_mv != 0
+					    && ch->channel_cfg.resolution != 0),
+				.scale = (ch->channel_cfg.resolution != 0)
+					? ((double)ch->vref_mv)
+					  / (double)(1u << ch->channel_cfg.resolution)
+					: 0.0,
+				.is_be = true,
+			};
+		}
 
 		strncpy(id, config->channels[index].name, sizeof(id));
 
@@ -666,7 +697,9 @@ static int iio_device_io_channels_read_attr(const struct device *dev,
 			return iio_device_io_channels_int_ref_voltage_read(dev, dst, len);
 		}
 		break;
-
+	case IIO_ATTR_TYPE_BUFFER:
+		dst[0] = '\0';
+		return 1;
 	default:
 		break;
 	}
@@ -750,10 +783,18 @@ static int iio_device_io_channels_init(const struct device *dev)
 	return ret;
 }
 
+static const char *iio_device_io_channels_get_buffer_name(const struct device *dev)
+{
+	const struct iio_device_io_channels_config *config = dev->config;
+
+	return config->buffer_name;
+}
+
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
 	.read_attr = iio_device_io_channels_read_attr,
 	.write_attr = iio_device_io_channels_write_attr,
+	.get_buffer_name = iio_device_io_channels_get_buffer_name,
 };
 
 #define DT_DRV_COMPAT iio_io_channels
@@ -778,6 +819,7 @@ static const struct iio_device_io_channels_config iio_device_io_channel_config_#
 	.address = DT_INST_REG_ADDR(inst),							\
 	.channels = iio_device_io_channels_##inst,						\
 	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),				\
+	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "buffer"),			\
 };												\
 												\
 IIO_DEVICE_DT_INST_DEFINE(inst, DT_INST_PROP_OR(inst, io_name, NULL),				\
