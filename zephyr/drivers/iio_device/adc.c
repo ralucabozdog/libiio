@@ -96,7 +96,7 @@ static int iio_device_adc_add_channels(const struct device *dev,
 
 		channel = &config->channels[index];
 		is_signed = channel->channel_cfg_dt_node_exists ? channel->channel_cfg.differential : 0;
-		scale_resolution = channel->resolution - (is_signed ? 0 : 1);
+		scale_resolution = channel->resolution - (is_signed ? 1 : 0);
 		const struct iio_data_format fmt = {
 			.length = channel->resolution,
 			.bits = channel->resolution,
