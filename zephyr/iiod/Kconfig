@@ -67,7 +67,7 @@ config LIBIIO_IIOD_USB_THREAD_STACK_SIZE
 
 config LIBIIO_IIOD_USB_RX_BUF_SIZE
 	int "RX buffer size"
-	default 16
+	default 2048
 	help
 	  Size of the ring buffer for storing data received from the USB
 	  device before it can be processed by the iiod server.
@@ -78,6 +78,23 @@ config LIBIIO_IIOD_USB_TX_BUF_SIZE
 	help
 	  Size of the ring buffer for storing data written by the iiod server
 	  before it can be transmitted by the USB device.
+
+config LIBIIO_IIOD_USB_NUM_PIPES
+	int "Number of USB pipes"
+	default 3
+	range 1 6
+	help
+	  Number of USB bulk endpoint pairs (pipes) to expose.
+	  Pipe 0 is used for the IIOD command channel. Additional pipes
+	  are used for data streaming (one per concurrent buffer/stream).
+	  Each pipe requires one IN and one OUT bulk endpoint.
+	  The USB device controller must support enough endpoints.
+
+config LIBIIO_IIOD_USB_PIPE_THREAD_STACK_SIZE
+	int "Pipe thread stack size"
+	default 8192
+	help
+	  Stack size of threads running the iiod interpreter on data pipes.
 
 endif # LIBIIO_IIOD_USB
 
