@@ -28,13 +28,19 @@ enum io_channel_type {
 
 #define IO_CHANNEL_DAC_ADC_CHANNEL_IDX_NONE UINT8_MAX
 
+struct io_channel_dac_cfg {
+	const struct device *dev;
+	struct dac_channel_cfg channel_cfg;
+	uint16_t vref_mv;
+};
+
 struct iio_device_io_channels_channel {
 	enum io_channel_type type;
 	const char *name;
 
 	union {
 		struct adc_dt_spec adc;
-		struct dac_dt_spec dac;
+		struct io_channel_dac_cfg dac;
 	};
 };
 
@@ -137,7 +143,7 @@ static int iio_device_io_channels_add_channels(const struct device *dev,
 	for (index = 0; index < config->num_channels; index++) {
 		bool output = config->channels[index].type == IO_CHANNEL_TYPE_DAC;
 
-		strncpy(id, config->channels[index].name, sizeof(id));
+		snprintk(id, sizeof(id), "voltage%d", index);
 
 		iio_channel = iio_device_add_channel(iio_device, index, id,
 				name, label, output, scan_element, &fmt);
@@ -190,7 +196,7 @@ static int iio_device_io_channels_add_channels(const struct device *dev,
 				break;
 			}
 			case IO_CHANNEL_TYPE_DAC: {
-				const struct dac_dt_spec *channel = &config->channels[index].dac;
+				const struct io_channel_dac_cfg *channel = &config->channels[index].dac;
 				if (channel->channel_cfg.resolution != 0) {
 					if (iio_channel_add_attr(iio_channel, scale_name, filename)) {
 						LOG_ERR("Could not add channel %d attribute %s", index, scale_name);
@@ -308,7 +314,7 @@ static int iio_device_io_channels_read_channel_scale(const struct device *dev,
 			resolution -= 1;
 		}
 	} else {
-		const struct dac_dt_spec *channel = &config->channels[index].dac;
+		const struct io_channel_dac_cfg *channel = &config->channels[index].dac;
 		vref_mv = channel->vref_mv;
 		resolution = channel->channel_cfg.resolution;
 	}
@@ -377,7 +383,7 @@ static int iio_device_io_channels_write_channel_raw(const struct device *dev,
         int index, const char *src, size_t len)
 {
 	const struct iio_device_io_channels_config *config = dev->config;
-	const struct dac_dt_spec *channel = &config->channels[index].dac;
+	const struct io_channel_dac_cfg *channel = &config->channels[index].dac;
 	uint32_t raw;
 	int ret;
 
@@ -392,7 +398,7 @@ static int iio_device_io_channels_write_channel_raw(const struct device *dev,
 		return ret;
 	}
 
-	ret = dac_write_value_dt(channel, raw);
+	ret = dac_write_value(channel->dev, channel->channel_cfg.channel_id, raw);
 	if (ret) {
 		LOG_ERR("Failed to write raw value '%.*s': %d", (int)len, src, ret);
 		return ret;
@@ -739,7 +745,8 @@ static int iio_device_io_channels_init(const struct device *dev)
 				}
 			}
 
-			ret = dac_channel_setup_dt(&config->channels[i].dac);
+			ret = dac_channel_setup(config->channels[i].dac.dev,
+						&config->channels[i].dac.channel_cfg);
 			if (ret < 0) {
 				LOG_ERR("Error setting up channel %zu", i);
 				break;
@@ -758,9 +765,19 @@ static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 
 #define DT_DRV_COMPAT iio_io_channels
 
+#define IO_CHANNEL_DAC_CFG_GET_BY_IDX(node_id, prop, idx)				\
+	{									\
+		.dev = DEVICE_DT_GET(DT_PHANDLE_BY_IDX(node_id, prop, idx)),	\
+		.channel_cfg = {						\
+			.channel_id = DT_PHA_BY_IDX(node_id, prop, idx, output),\
+			.resolution = DT_PROP_OR(node_id, zephyr_resolution, 0),\
+		},								\
+		.vref_mv = DT_PROP_OR(node_id, zephyr_vref_mv, 0),		\
+	}
+
 #define IIO_DEVICE_IO_CHANNEL(node_id, prop, idx)					\
         COND_CODE_1(DT_PHA_HAS_CELL_AT_IDX(node_id, prop, idx, input), \
-                    ({ .type = IO_CHANNEL_TYPE_ADC, .name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .adc = ADC_DT_SPEC_GET_BY_IDX(node_id, idx) }), ({.name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .type = IO_CHANNEL_TYPE_DAC, .dac = DAC_DT_SPEC_GET_BY_IDX(node_id, idx)}))
+                    ({ .type = IO_CHANNEL_TYPE_ADC, .name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .adc = ADC_DT_SPEC_GET_BY_IDX(node_id, idx) }), ({.name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .type = IO_CHANNEL_TYPE_DAC, .dac = IO_CHANNEL_DAC_CFG_GET_BY_IDX(node_id, prop, idx)}))
 
 #define IIO_DEVICE_IO_CHANNELS_INIT(inst)							\
 static struct iio_device_io_channels_channel_overrides iio_device_io_channel_overrides_##inst[DT_INST_PROP_LEN(inst, io_channels)];	\
