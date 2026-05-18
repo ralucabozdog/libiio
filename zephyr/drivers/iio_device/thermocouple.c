@@ -410,7 +410,8 @@ static const struct iio_device_thermocouple_config thermocouple_config_##inst = 
 	.num_channels = ARRAY_SIZE(iio_device_thermocouple_channels_##inst),	\
 };		\
 \
-IIO_DEVICE_DT_INST_DEFINE(inst, iio_device_thermocouple_init, NULL, \
+IIO_DEVICE_DT_INST_DEFINE(inst, DT_INST_PROP_OR(inst, io_name, NULL), \
+    iio_device_thermocouple_init, NULL, \
     &thermocouple_data_##inst, &thermocouple_config_##inst, \
     POST_KERNEL, CONFIG_LIBIIO_IIO_DEVICE_THERMOCOUPLE_INIT_PRIORITY, \
     &iio_device_thermocouple_driver_api);

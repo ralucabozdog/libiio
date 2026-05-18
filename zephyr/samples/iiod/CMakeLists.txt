@@ -3,6 +3,10 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
+if(ad_apardpfw_sl IN_LIST SHIELD)
+    set(EXTRA_CONF_FILE ad_apardpfw_sl.conf)
+endif()
+
 if(eval_ad4052_ardz IN_LIST SHIELD)
   list(APPEND EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
 endif()
