@@ -10,10 +10,7 @@ cmake_minimum_required(VERSION 3.20.0)
 #   set(EXTRA_CONF_FILE adc-emul.conf)
 # endif()
 
-if(NOT ad_apardpfw_sl IN_LIST SHIELD)
-    set(EXTRA_DTC_OVERLAY_FILE apard32690_max32690_m4.overlay)
-    set(EXTRA_CONF_FILE apard32690_max32690_m4.conf)
-else()
+if(ad_apardpfw_sl IN_LIST SHIELD)
     set(EXTRA_CONF_FILE ad_apardpfw_sl.conf)
 endif()
 

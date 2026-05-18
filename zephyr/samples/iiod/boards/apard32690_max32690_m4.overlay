@@ -24,16 +24,3 @@
 		};
 	};
 };
-
-arduino_spi: &spi1 {
-		status = "okay";
-};
-
-/* Swap SPI3 and SPI4 assignments for RevE */
-pmod_spi: &spi3 {
-    pinctrl-0 = <&spi3a_miso_p0_20 &spi3a_mosi_p0_21 &spi3a_sck_p0_16
-                 &spi3a_ss0_p0_19>;
-    pinctrl-names = "default";
-};
-
-/delete-node/ &spi3;
