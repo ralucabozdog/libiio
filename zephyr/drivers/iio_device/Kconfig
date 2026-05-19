@@ -45,17 +45,18 @@ config LIBIIO_IIO_DEVICE_SENSOR_INIT_PRIORITY
 	  Has to be higher than the initialization priority of the sensor drivers.
 
 
-config LIBIIO_IIO_DEVICE_THERMOCOUPLE
-	bool "Thermocouple driver"
-	default y
+config LIBIIO_DEVICE_THERMOCOUPLE_CN0391
+	bool "CN0391 Thermocouple driver"
+	default n
+	depends on DT_HAS_IIO_THERMOCOUPLE_ENABLED
 	help
-	  Enable the Zephyr Thermocouple iio device driver class.
+	  Enable the CN0391 Thermocouple iio device driver.
 
-config LIBIIO_IIO_DEVICE_THERMOCOUPLE_INIT_PRIORITY
-	int "Thermocouple driver init priority"
+config LIBIIO_DEVICE_THERMOCOUPLE_CN0391_INIT_PRIORITY
+	int "CN0391 Thermocouple driver init priority"
 	default KERNEL_INIT_PRIORITY_DEVICE
-	depends on LIBIIO_IIO_DEVICE_THERMOCOUPLE
+	depends on LIBIIO_DEVICE_THERMOCOUPLE_CN0391
 	help
-	  Initialization priority of the Zephyr Thermocouple iio device driver class.
+	  Initialization priority of the CN0391 Thermocouple iio device driver.
 
 endif # LIBIIO_IIO_DEVICE

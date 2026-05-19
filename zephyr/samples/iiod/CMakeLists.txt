@@ -11,6 +11,11 @@ if(eval_ad4052_ardz IN_LIST SHIELD)
   list(APPEND EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
 endif()
 
+if(eval_cn0391_ardz IN_LIST SHIELD)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE eval_cn0391_ardz.overlay)
+  list(APPEND EXTRA_CONF_FILE cn0391.conf)
+endif()
+
 if(pmod_acl IN_LIST SHIELD)
   list(APPEND EXTRA_DTC_OVERLAY_FILE pmod_acl.overlay)
   list(APPEND EXTRA_CONF_FILE pmod_acl.conf)
@@ -35,3 +40,4 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iiod)
 
 target_sources(app PRIVATE src/main.c)
+target_sources_ifdef(CONFIG_LIBIIO_IIOD_CN0391 app PRIVATE src/cn0391_app.c)

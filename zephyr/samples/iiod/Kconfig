@@ -18,6 +18,11 @@ config LIBIIO_IIOD_SENSOR_ADXL345
 	help
 	  Enable adxl345 sensor IIO device driver.
 
+config LIBIIO_IIOD_CN0391
+	bool "Enable CN0391 thermocouple sampling"
+	help
+	  Enable background sampling thread for CN0391 thermocouple board.
+
 endmenu
 
 source "Kconfig.zephyr"

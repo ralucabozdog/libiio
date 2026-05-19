@@ -12,9 +12,9 @@
 
 #include <math.h>
 
-LOG_MODULE_REGISTER(iio_device_thermocouple, CONFIG_LIBIIO_LOG_LEVEL);
+#include <thermocouple_cn0391.h>
 
-#define NUM_VIRTUAL_CHANNELS	4
+LOG_MODULE_REGISTER(thermocouple_cn0391, CONFIG_LIBIIO_LOG_LEVEL);
 
 struct iio_device_thermocouple_config {
 	const char *name;
@@ -24,8 +24,6 @@ struct iio_device_thermocouple_config {
 
 struct iio_device_thermocouple_data {
 	double hot_junction_temp[NUM_VIRTUAL_CHANNELS];
-	struct k_thread sampling_thread;
-	k_thread_stack_t *sampling_stack;
 };
 
 static const char* virtual_channel_ids[NUM_VIRTUAL_CHANNELS] = {"voltage3", "voltage2", "voltage1", "voltage0"};
@@ -46,11 +44,6 @@ static const char *const scale_name = "scale";
 
 #define CHANNEL_COUNT	3
 #define ROUNDS			1
-#define TCP_SERVER_PORT 8080
-
-#define SAMPLING_PERIOD_MS 5
-#define SAMPLING_THREAD_PRIORITY 7
-#define SAMPLING_THREAD_STACK_SIZE 2048
 
 static uint32_t readings[NUM_VIRTUAL_CHANNELS][ROUNDS * CHANNEL_COUNT];
 
@@ -153,7 +146,7 @@ static double resistance_to_temperature(double resistance)
 	return (double)T;
 }
 
-int32_t read_channel_average(int channel, const uint32_t *readings)
+static int32_t read_channel_average(int channel, const uint32_t *readings)
 {
 	int32_t adc_code = 0;
 	for (uint8_t r = 0U; r < ROUNDS; r++)
@@ -164,31 +157,28 @@ int32_t read_channel_average(int channel, const uint32_t *readings)
 	return adc_code;
 }
 
-int read_temperature(const struct device *dev, const struct adc_sequence *seq, int index)
+static int read_temperature(const struct device *dev, int index)
 {
-	double thermo_voltage;
-	double rtd_resistance;
-	int ret;
 	struct iio_device_thermocouple_data *data = dev->data;
-	const struct iio_device_thermocouple_config *config = dev->config;
 	int32_t reference_reading, thermo_reading, cold_junction_reading;
-	double rtd_voltage_r5, current, rtd_voltage_r1, cold_junction_temp, v_cold_junction, v_total, hot_junction_temp;
+	double rtd_voltage_r5, current, rtd_voltage_r1, cold_junction_temp;
+	double v_cold_junction, v_total, hot_junction_temp, thermo_voltage, rtd_resistance;
 
 	reference_reading = read_channel_average(REFERENCE_RES_CHANNEL, readings[index]);
-	rtd_voltage_r5 = (ADC_REF_VOLTAGE) * 
-						(double)(reference_reading - ADC_HALF_RESOLUTION) / 
+	rtd_voltage_r5 = (ADC_REF_VOLTAGE) *
+						(double)(reference_reading - ADC_HALF_RESOLUTION) /
 						(ADC_HALF_RESOLUTION * RTD_GAIN);
 
 	current = rtd_voltage_r5 / THERMO_RES;
 
 	thermo_reading = read_channel_average(THERMOCOUPLE_CHANNEL, readings[index]);
-	thermo_voltage = (ADC_REF_VOLTAGE) * 
-						(double)(thermo_reading - ADC_HALF_RESOLUTION) / 
+	thermo_voltage = (ADC_REF_VOLTAGE) *
+						(double)(thermo_reading - ADC_HALF_RESOLUTION) /
 						(ADC_HALF_RESOLUTION * GAIN) * 1000; // [mV]
 
 	cold_junction_reading = read_channel_average(COLD_JUNCTION_CHANNEL, readings[index]);
-	rtd_voltage_r1 = (ADC_REF_VOLTAGE) * 
-						(double)(cold_junction_reading - ADC_HALF_RESOLUTION) / 
+	rtd_voltage_r1 = (ADC_REF_VOLTAGE) *
+						(double)(cold_junction_reading - ADC_HALF_RESOLUTION) /
 						(ADC_HALF_RESOLUTION * RTD_GAIN);
 
 	rtd_resistance = rtd_voltage_r1 / current;
@@ -201,7 +191,7 @@ int read_temperature(const struct device *dev, const struct adc_sequence *seq, i
 	k_mutex_lock(&data_mutex, K_FOREVER);
 	data->hot_junction_temp[index] = hot_junction_temp;
 	k_mutex_unlock(&data_mutex);
-	
+
 	return 0;
 }
 
@@ -209,9 +199,8 @@ int read_temperature(const struct device *dev, const struct adc_sequence *seq, i
 						BIT(config->channels[index * 2].channel_id) | \
 						BIT(config->channels[index * 2 + 1].channel_id);
 
-static void sampling_thread_worker(void *arg1, void *arg2, void* arg3)
+int thermocouple_cn0391_sample(const struct device *dev, int index)
 {
-	const struct device *dev = (const struct device *)arg1;
 	const struct iio_device_thermocouple_config *config = dev->config;
 	const struct device *adc_dev = config->channels[0].dev;
 	int rtd_channel_idx;
@@ -220,39 +209,44 @@ static void sampling_thread_worker(void *arg1, void *arg2, void* arg3)
 		.interval_us = 0,
 		.extra_samplings = ROUNDS - 1,
 	};
-	struct adc_sequence seq;
+	struct adc_sequence seq = {0};
+
+	if (index < 0 || index >= NUM_VIRTUAL_CHANNELS) {
+		return -EINVAL;
+	}
+
 	seq.resolution = ADC_RESOLUTION;
 	seq.oversampling = 0;
 	seq.buffer_size = sizeof(uint32_t) * ROUNDS * CHANNEL_COUNT;
-	seq.options = &opts;	
+	seq.options = &opts;
 
-	while (1) {
-		for (int index = 0; index < NUM_VIRTUAL_CHANNELS; index++) {
-			if (k_mutex_lock(&adc_mutex, K_NO_WAIT) == 0) {
-				seq.buffer = readings[index];
-				rtd_channel_idx = index * 2 + 1;
-				ret = adc_channel_setup_dt(&config->channels[rtd_channel_idx]);
-				if (ret < 0) {
-					LOG_ERR("Failed to setup RTD channel %d (%d)", rtd_channel_idx, ret);
-					k_mutex_unlock(&adc_mutex);
-					continue;
-				}
-				seq.channels = MASK(index);
-
-				ret = adc_read(adc_dev, &seq);
-				k_mutex_unlock(&adc_mutex);
-				if (ret) {
-					LOG_ERR("ADC read failed with code %d\n", ret);
-					continue;
-				}
-				ret = read_temperature(dev, &seq, index);
-				if (ret < 0) {
-					LOG_ERR("Read temperature FAILED for channel %s", virtual_channel_ids[index]);
-				}
-			}
-			k_sleep(K_MSEC(1)); // i think this can be removed
-		}
+	if (k_mutex_lock(&adc_mutex, K_NO_WAIT) != 0) {
+		return -EBUSY;
 	}
+
+	seq.buffer = readings[index];
+	rtd_channel_idx = index * 2 + 1;
+	ret = adc_channel_setup_dt(&config->channels[rtd_channel_idx]);
+	if (ret < 0) {
+		LOG_ERR("Failed to setup RTD channel %d (%d)", rtd_channel_idx, ret);
+		k_mutex_unlock(&adc_mutex);
+		return ret;
+	}
+	seq.channels = MASK(index);
+
+	ret = adc_read(adc_dev, &seq);
+	k_mutex_unlock(&adc_mutex);
+	if (ret) {
+		LOG_ERR("ADC read failed with code %d", ret);
+		return ret;
+	}
+
+	ret = read_temperature(dev, index);
+	if (ret < 0) {
+		LOG_ERR("Read temperature FAILED for channel %d", index);
+	}
+
+	return ret;
 }
 
 static int iio_device_thermocouple_init(const struct device *dev)
@@ -276,12 +270,6 @@ static int iio_device_thermocouple_init(const struct device *dev)
 	for (int i = 0; i < NUM_VIRTUAL_CHANNELS; i++) {
 		data->hot_junction_temp[i] = 0.0;
 	}
-
-	k_thread_create(&data->sampling_thread, 
-		data->sampling_stack, SAMPLING_THREAD_STACK_SIZE,
-		sampling_thread_worker, (void*)dev, NULL, NULL,
-		SAMPLING_THREAD_PRIORITY, 0, K_SECONDS(10));
-	k_thread_name_set(&data->sampling_thread, "thermo_sampling");
 
 	return 0;
 }
@@ -396,10 +384,7 @@ static DEVICE_API(iio_device, iio_device_thermocouple_driver_api) = {
 	ADC_DT_SPEC_GET_BY_IDX(node_id, idx)
 
 #define IIO_DEVICE_THERMOCOUPLE_INIT(inst)	\
-K_THREAD_STACK_DEFINE(thermocouple_sampling_stack_##inst, SAMPLING_THREAD_STACK_SIZE)	\
-static struct iio_device_thermocouple_data thermocouple_data_##inst = {	\
-	.sampling_stack = thermocouple_sampling_stack_##inst,	\
-};	\
+static struct iio_device_thermocouple_data thermocouple_data_##inst;	\
 		\
 static struct adc_dt_spec iio_device_thermocouple_channels_##inst[] = {    \
 	DT_INST_FOREACH_PROP_ELEM_SEP(inst, io_channels, IIO_DEVICE_THERMOCOUPLE_CHANNEL, (,)) \
@@ -413,7 +398,7 @@ static const struct iio_device_thermocouple_config thermocouple_config_##inst = 
 IIO_DEVICE_DT_INST_DEFINE(inst, DT_INST_PROP_OR(inst, io_name, NULL), \
     iio_device_thermocouple_init, NULL, \
     &thermocouple_data_##inst, &thermocouple_config_##inst, \
-    POST_KERNEL, CONFIG_LIBIIO_IIO_DEVICE_THERMOCOUPLE_INIT_PRIORITY, \
+    POST_KERNEL, CONFIG_LIBIIO_DEVICE_THERMOCOUPLE_CN0391_INIT_PRIORITY, \
     &iio_device_thermocouple_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(IIO_DEVICE_THERMOCOUPLE_INIT)

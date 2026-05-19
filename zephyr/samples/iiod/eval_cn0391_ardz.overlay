@@ -5,14 +5,13 @@
  */
 
 #include <zephyr/dt-bindings/adc/ad7124-adc.h>
-#include <zephyr/dt-bindings/gpio/adi-max32-gpio.h>
 
 / {
 	iio-context {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-        ad7124-8 {
+		cn0391_thermocouple: ad7124-8 {
 			compatible = "iio,thermocouple";
 			io-channels = <&ad7124_eval_cn0391_ardz 0>, <&ad7124_eval_cn0391_ardz 1>, <&ad7124_eval_cn0391_ardz 2>,
 							<&ad7124_eval_cn0391_ardz 3>, <&ad7124_eval_cn0391_ardz 4>, <&ad7124_eval_cn0391_ardz 5>,
