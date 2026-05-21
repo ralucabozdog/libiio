@@ -408,6 +408,7 @@ static int iio_device_io_channels_write_channel_raw(const struct device *dev,
         int index, const char *src, size_t len)
 {
 	const struct iio_device_io_channels_config *config = dev->config;
+	const struct dac_dt_spec *channel = &config->channels[index].dac;
 	uint32_t raw;
 	int ret;
 
@@ -422,6 +423,7 @@ static int iio_device_io_channels_write_channel_raw(const struct device *dev,
 		return ret;
 	}
 
+	ret = dac_write_value_dt(channel, raw);
 	if (ret) {
 		LOG_ERR("Failed to write raw value '%.*s': %d", (int)len, src, ret);
 		return ret;
@@ -769,6 +771,8 @@ static int iio_device_io_channels_init(const struct device *dev)
 					break;
 				}
 			}
+
+			ret = dac_channel_setup_dt(&config->channels[i].dac);
 			if (ret < 0) {
 				LOG_ERR("Error setting up channel %zu", i);
 				break;
