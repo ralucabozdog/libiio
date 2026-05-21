@@ -56,7 +56,9 @@
 				IIO_SENSOR_CHAN_ACCEL_Y
 				IIO_SENSOR_CHAN_ACCEL_Z
 			>;
-			buffer-name = "buffer0";
+			buffer-name = "buffer1";
+			trigger-id = "trigger1";
+			trigger-type = "zephyr-common";
 		};
 	};
 };
