@@ -11,6 +11,8 @@
 #include <errno.h>
 #include <string.h>
 #include <iio_device.h>
+#include <zephyr/sys/util.h>
+#include <stdlib.h>
 
 #if defined(__DATE__) && defined(__TIME__)
 #define BACKEND_VERSION(_ver) _ver " " __DATE__ " " __TIME__
@@ -45,7 +47,26 @@ zephyr_write_attr(const struct iio_attr *attr, const char *src, size_t len)
 static const struct iio_device *
 zephyr_get_trigger(const struct iio_device *dev)
 {
-	return NULL;
+	const struct iio_device * trigger;
+
+	if (iio_device_is_trigger(dev)) {
+		return iio_ptr(-ENOENT);
+	} else {
+		trigger = (const struct iio_device *) iio_device_get_data(dev);
+		
+		if (!trigger) {
+			return iio_ptr(-ENODEV);
+		} else {
+			return trigger;
+		}
+	}
+}
+
+int zephyr_set_trigger(const struct iio_device *dev,
+			const struct iio_device *trigger)
+{
+	iio_device_set_data((struct iio_device *)dev, (void *)trigger);
+	return 0;
 }
 
 static struct iio_context *
@@ -93,6 +114,7 @@ static const struct iio_backend_ops zephyr_ops = {
 	.read_attr = zephyr_read_attr,
 	.write_attr = zephyr_write_attr,
 	.get_trigger = zephyr_get_trigger,
+	.set_trigger = zephyr_set_trigger,
 };
 
 const struct iio_backend iio_external_backend = {
