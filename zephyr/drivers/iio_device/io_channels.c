@@ -11,6 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <iio/iio-backend.h>
 #include <iio_device.h>
+#include <iio_trigger.h>
 
 LOG_MODULE_REGISTER(iio_device_io_channels, CONFIG_LIBIIO_LOG_LEVEL);
 
@@ -43,6 +44,8 @@ struct iio_device_io_channels_config {
 	size_t num_channels;
 	uint8_t address;
 	const char *buffer_name;
+	enum iio_device_trigger_type trigger_type;
+	const char *trigger_id;
 };
 
 struct iio_device_io_channels_channel_adc_overrides {
@@ -790,11 +793,38 @@ static const char *iio_device_io_channels_get_buffer_name(const struct device *d
 	return config->buffer_name;
 }
 
+static int iio_device_io_channels_add_trigger(struct iio_context *ctx, struct iio_device *iio_device)
+{
+	const struct device *dev = (const struct device *)iio_device_get_pdata(iio_device);
+	const struct iio_device_io_channels_config *config = dev->config;
+	struct iio_device *trig;
+	int ret = 0;
+
+	trig = iio_device_trigger_create(ctx, config->trigger_type, config->trigger_id);
+	if (!trig) {
+		LOG_ERR("Could not add trigger device.");
+		return -ENOMEM;
+	}
+	
+	iio_device_trigger_set_period(trig, 100);
+
+	ret = iio_device_set_trigger(iio_device, trig);
+	if (ret < 0) {
+		LOG_ERR("Could not set trigger.");
+		return ret;
+	}
+
+	iio_device_trigger_init(trig);
+
+	return ret;
+}
+
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
 	.read_attr = iio_device_io_channels_read_attr,
 	.write_attr = iio_device_io_channels_write_attr,
 	.get_buffer_name = iio_device_io_channels_get_buffer_name,
+	.add_trigger = iio_device_io_channels_add_trigger,
 };
 
 #define DT_DRV_COMPAT iio_io_channels
@@ -820,6 +850,10 @@ static const struct iio_device_io_channels_config iio_device_io_channel_config_#
 	.channels = iio_device_io_channels_##inst,						\
 	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),				\
 	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "buffer"),			\
+	.trigger_type = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, trigger_type), \
+    ((enum iio_device_trigger_type)DT_INST_ENUM_IDX(inst, trigger_type)), \
+    (IIO_DEVICE_TRIGGER_TIMER)), \
+	.trigger_id = DT_INST_PROP_OR(inst, trigger_id, "trigger" STRINGIFY(inst)),					\
 };												\
 												\
 IIO_DEVICE_DT_INST_DEFINE(inst, DT_INST_PROP_OR(inst, io_name, NULL),				\

@@ -11,7 +11,10 @@
 #include <errno.h>
 #include <string.h>
 #include <iio_device.h>
+#include <zephyr/kernel.h>
+#include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
+#include <stdlib.h>
 
 #if defined(__DATE__) && defined(__TIME__)
 #define BACKEND_VERSION(_ver) _ver " " __DATE__ " " __TIME__
@@ -24,20 +27,6 @@
 #else
 #define BACKEND_VERSION_BUILD KERNEL_VERSION_STRING
 #endif
-
-struct iio_buffer_pdata {
-	bool enabled;
-	const struct device *zephyr_dev;
-	const struct iio_device *iio_dev;
-	struct iio_channels_mask *mask;
-	size_t sample_size;
-};
-
-struct iio_block_pdata {
-	void *data;
-	size_t size;
-	struct iio_buffer_pdata *buf_pdata;
-};
 
 static ssize_t
 zephyr_read_attr(const struct iio_attr *attr, char *dst, size_t len)
@@ -93,6 +82,7 @@ zephyr_create_context(const struct iio_context_params *params, const char *args)
 	const char *label = NULL;
 	char id[32];
 	int i = 0;
+	int ret;
 
 	const char *description = "Zephyr " BACKEND_VERSION(BACKEND_VERSION_BUILD);
 
@@ -117,11 +107,16 @@ zephyr_create_context(const struct iio_context_params *params, const char *args)
 		iio_device_set_pdata(iio_device, (struct iio_device_pdata *) dev);
 		iio_device_add_channels(dev, iio_device);
 
-		buffer = iio_device_add_buffer(iio_device, i);
+		buffer = iio_device_add_buffer(iio_device, 0);
 		const char *buffer_name = iio_device_get_buffer_name(dev);
 		iio_buffer_add_attr(buffer, buffer_name);
 
 		i++;
+
+		ret = iio_device_add_trigger(ctx, iio_device);
+		if (ret < 0) {
+			return iio_ptr(ret);
+		}
 	}
 
 	return ctx;
@@ -133,13 +128,11 @@ zephyr_open_buffer(const struct iio_device *dev, unsigned int idx,
 {
 	struct iio_buffer_pdata *pdata;
 	const struct device *zephyr_dev;
-	size_t sample_size = 0;
-	unsigned int nb_channels = iio_device_get_channels_count(dev);
-
 
 	pdata = zalloc(sizeof(*pdata));
-	if (!pdata)
+	if (!pdata) {
 		return iio_ptr(-ENOMEM);
+	}
 
 	zephyr_dev = (const struct device *)iio_device_get_pdata(dev);
 
@@ -148,16 +141,9 @@ zephyr_open_buffer(const struct iio_device *dev, unsigned int idx,
 	pdata->iio_dev = dev;
 	pdata->mask = mask;
 
-	for (unsigned int i = 0; i < nb_channels; i++) {
-		const struct iio_channel *chn = iio_device_get_channel(dev, i);
-		if (iio_channel_is_scan_element(chn) &&
-			iio_channel_is_enabled(chn, mask)) {
-			const struct iio_data_format *fmt = iio_channel_get_data_format(chn);
-			sample_size += DIV_ROUND_UP(fmt->length, BITS_PER_BYTE);
-		}
-	}
-
-pdata->sample_size = sample_size;
+	k_mutex_init(&pdata->lock);
+	sys_slist_init(&pdata->pending_blocks);
+	pdata->trig = NULL;
 
 	return pdata;
 }
@@ -170,15 +156,41 @@ static void zephyr_close_buffer(struct iio_buffer_pdata *pdata)
 static int zephyr_enable_buffer(struct iio_buffer_pdata *pdata,
 				size_t nb_samples, bool enable, bool cyclic)
 {
-	pdata->enabled = enable;
+	if (enable) {
+		const struct iio_device *trig = (const struct iio_device *) iio_device_get_data(pdata->iio_dev);
+
+		if (!trig) {
+			return -ENODEV;
+		}
+
+		if (!iio_device_is_trigger(trig)) {
+			return -EINVAL;
+		}
+
+		pdata->enabled = true;
+
+		return iio_device_trigger_subscribe(&pdata->node);
+	}
+
+	pdata->enabled = false;
+	iio_device_trigger_unsubscribe(&pdata->node);
+	pdata->trig = NULL;
+
+	k_mutex_lock(&pdata->lock, K_FOREVER);
+	sys_snode_t *n;
+	SYS_SLIST_FOR_EACH_NODE(&pdata->pending_blocks, n) {
+		struct iio_block_pdata *b = CONTAINER_OF(n, struct iio_block_pdata, node);
+		k_sem_give(&b->ready_sem);
+	}
+	k_mutex_unlock(&pdata->lock);
+
 	return 0;
 }
 
 static void zephyr_cancel_buffer(struct iio_buffer_pdata *pdata)
 {
-	pdata->enabled = false;
+	(void)zephyr_enable_buffer(pdata, 0, false, false);
 }
-
 
 static int iio_device_read_channel_raw(const struct device *zephyr_dev,
 									   const struct iio_channel *chn,
@@ -291,8 +303,9 @@ zephyr_create_block(struct iio_buffer_pdata *pdata, size_t size, void **data)
 	struct iio_block_pdata *block;
 
 	block = zalloc(sizeof(*block));
-    if (!block)
+	if (!block) {
 		return iio_ptr(-ENOMEM);
+	}
 
 	block->data = malloc(size);
 	if (!block->data) {
@@ -300,43 +313,58 @@ zephyr_create_block(struct iio_buffer_pdata *pdata, size_t size, void **data)
 		return iio_ptr(-ENOMEM);
 	}
 
+	block->buf_pdata = pdata;
 	block->size = size;
-    block->buf_pdata = pdata;
-	*data = block->data;
+	block->bytes_used = 0;
+	block->cyclic = false;
+	k_sem_init(&block->ready_sem, 0, 1);
 
+	*data = block->data;
 	return block;
 }
 
 static void zephyr_free_block(struct iio_block_pdata *block)
 {
 	if (block) {
-        if (block->data)
+		if (block->data) {
 			free(block->data);
+		}
 		free(block);
 	}
 }
 
-static int zephyr_enqueue_block(struct iio_block_pdata *block,
-                                size_t bytes_used, bool cyclic)
+static int zephyr_enqueue_block(struct iio_block_pdata *pdata, size_t bytes_used, bool cyclic)
 {
-    (void)bytes_used;
-    (void)cyclic;
+	struct iio_buffer_pdata *buf = pdata->buf_pdata;
+
+	pdata->bytes_used = bytes_used ? bytes_used : pdata->size;
+	pdata->cyclic = cyclic;
+
+	while (k_sem_take(&pdata->ready_sem, K_NO_WAIT) == 0) {
+	}
+
+	k_mutex_lock(&buf->lock, K_FOREVER);
+	sys_slist_append(&buf->pending_blocks, &pdata->node);
+	k_mutex_unlock(&buf->lock);
+
 	return 0;
 }
 
 static int zephyr_dequeue_block(struct iio_block_pdata *block, bool nonblock)
 {
 	struct iio_buffer_pdata *buf_pdata = block->buf_pdata;
-    ssize_t ret;
 
-    (void)nonblock;
+	if (nonblock) {
+		if (k_sem_take(&block->ready_sem, K_NO_WAIT) != 0) {
+			return -EBUSY;
+		}
+	} else {
+		k_sem_take(&block->ready_sem, K_FOREVER);
+	}
 
-    if (!buf_pdata->enabled)
+	if (!buf_pdata->enabled) {
 		return -EBADF;
-
-    ret = zephyr_readbuf(buf_pdata, block->data, block->size);
-    if (ret < 0)
-        return (int)ret;
+	}
 	
 	return 0;
 }
