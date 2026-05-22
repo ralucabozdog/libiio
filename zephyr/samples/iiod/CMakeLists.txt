@@ -3,12 +3,14 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-if(eval_ad4052_ardz IN_LIST SHIELD)
-  set(EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
-elseif(CONFIG_LIBIIO_IIOD_ADC_EMUL)
-  set(EXTRA_DTC_OVERLAY_FILE adc-emul.overlay)
-  set(EXTRA_CONF_FILE adc-emul.conf)
-endif()
+# if(eval_ad4052_ardz IN_LIST SHIELD)
+#   set(EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
+# elseif(CONFIG_LIBIIO_IIOD_ADC_EMUL)
+#   set(EXTRA_DTC_OVERLAY_FILE adc-emul.overlay)
+#   set(EXTRA_CONF_FILE adc-emul.conf)
+# endif()
+
+set(EXTRA_DTC_OVERLAY_FILE adc-max32.overlay)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iiod)
