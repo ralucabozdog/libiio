@@ -12,7 +12,16 @@
 				io-channels = <&adc 0>;
 				io-channel-names = "adc_in_ch0";
 				io-name = "max32-adc";
+				buffer-name = "buffer0";
+				trigger-device = <&trigger0>;
 			};
+		};
+
+		trigger0: max32-trigger {
+			compatible = "iio,trigger-timer";
+			io-name = "trigger0";
+			trigger-id = "trigger0";
+			trigger-type = "timer";
 		};
 	};
 };
