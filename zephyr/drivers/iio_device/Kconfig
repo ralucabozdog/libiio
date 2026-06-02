@@ -44,5 +44,12 @@ config LIBIIO_IIO_DEVICE_SENSOR_INIT_PRIORITY
 	  Initialization priority of the Zephyr Sensor iio device driver class.
 	  Has to be higher than the initialization priority of the sensor drivers.
 
+config LIBIIO_IIO_DEVICE_TRIGGER_INIT_PRIORITY
+	int "Trigger driver init priority"
+	default KERNEL_INIT_PRIORITY_DEVICE
+	help
+	  Initialization priority of the Zephyr Trigger iio device driver class.
+	  Has to be same or higher than the initialization priority of the io-channel iio
+	  device drivers.
 
 endif # LIBIIO_IIO_DEVICE
