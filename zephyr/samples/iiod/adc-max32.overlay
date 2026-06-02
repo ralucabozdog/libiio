@@ -8,10 +8,18 @@
 	iio-context {
 		iio-adcs {
 			max32-adc {
-				compatible = "iio,adc";
+				compatible = "iio,io-channels";
 				io-channels = <&adc 0>;
 				io-channel-names = "adc_in_ch0";
 				io-name = "max32-adc";
+				buffer-name = "buffer0";
+				trigger-device = <&trigger_max32>;
+			};
+
+			trigger_max32: trigger_max32 {
+				compatible = "iio,trigger-timer";
+				io-name = "trigger_timer0";
+				trigger-id = "trigger0";
 			};
 		};
 	};
@@ -40,4 +48,3 @@
 		zephyr,vref-mv = <1250>;
 	};
 };
-

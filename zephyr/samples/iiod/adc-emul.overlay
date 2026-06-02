@@ -13,6 +13,13 @@
 				io-channel-names = "voltage0", "voltage1";
 				io-name = "adc-emul";
 				buffer-name = "buffer0";
+				trigger-device = <&trigger_adc_emul>;
+			};
+
+			trigger_adc_emul: trigger_adc_emul {
+				compatible = "iio,trigger-timer";
+				io-name = "trigger_timer0";
+				trigger-id = "trigger0";
 			};
 		};
 	};
