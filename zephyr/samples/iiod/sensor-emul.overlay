@@ -21,6 +21,13 @@
 				>;
 				buffer-name = "buffer0";
 				io-name = "ltc2990";
+				trigger-device = <&trigger_sensor_emul>;
+			};
+
+			trigger_sensor_emul: trigger_sensor_emul {
+				compatible = "iio,trigger-timer";
+				io-name = "trigger_timer1";
+				trigger-id = "trigger1";
 			};
 		};
 	};

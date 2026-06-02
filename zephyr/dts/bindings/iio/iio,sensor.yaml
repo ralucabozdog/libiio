@@ -18,3 +18,23 @@ properties:
 
   buffer-name:
     type: string
+    description: |
+      Name of the buffer attribute for this IIO device.
+      If not specified, defaults to "buffer".
+
+  trigger-device:
+    type: phandle
+    description: |
+      Phandle to the IIO trigger device node that this device is associated with. It is used for
+      trigger-timer devices. For trigger-sensor and trigger-sensor-stream devices, the trigger node must be 
+      nested inside the sensor node.
+
+child-binding:
+  description: |
+    Trigger node nested inside the IIO sensor node. Must use a compatible
+    iio,trigger-sensor or iio,trigger-sensor-stream.
+    The trigger child node is identified at build time by the presence of the
+    'trigger-id' property and may have any node name (e.g. trigger, trigger0,
+    trigger_sensor0).
+    When this child node is present, the 'trigger-device' property of the parent
+    sensor node must not be specified.

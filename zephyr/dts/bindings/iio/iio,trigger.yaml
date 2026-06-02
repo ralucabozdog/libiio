@@ -1,0 +1,22 @@
+# Copyright (c) 2026 Analog Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+include: base.yaml
+
+description: IIO trigger binding
+
+properties:
+  io-name:
+    required: true
+    type: string
+    description: |
+      The device name for use within IIOD. Can be one of the predefined names:
+      "trigger_timer", "trigger_sensor", "trigger_sensor_stream" or "trigger_io_channels_stream"
+      followed by a unique identifier ("0", "1", etc.).
+      Example: "trigger_timer0", "trigger_sensor1", "trigger_sensor_stream2", "trigger_io_channels_stream3".
+
+  trigger-id:
+    required: true
+    type: string
+    description: |
+      ID of the trigger. Must start with "trigger".
