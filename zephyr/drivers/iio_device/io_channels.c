@@ -11,6 +11,7 @@
 #include <zephyr/logging/log.h>
 #include <iio/iio-backend.h>
 #include <iio_device.h>
+#include <iio_trigger.h>
 
 LOG_MODULE_REGISTER(iio_device_io_channels, CONFIG_LIBIIO_LOG_LEVEL);
 
@@ -43,6 +44,7 @@ struct iio_device_io_channels_config {
 	size_t num_channels;
 	uint8_t address;
 	const char *buffer_name;
+	const struct device *trigger_dev;
 };
 
 struct iio_device_io_channels_channel_adc_overrides {
@@ -790,11 +792,43 @@ static const char *iio_device_io_channels_get_buffer_name(const struct device *d
 	return config->buffer_name;
 }
 
+static int iio_device_io_channels_add_trigger(struct iio_context *ctx, struct iio_device *iio_device)
+{
+	const struct device *dev = (const struct device *)iio_device_get_pdata(iio_device);
+	const struct iio_device_io_channels_config *config = dev->config;
+	const struct device *trigger_dev = config->trigger_dev;
+
+	if (trigger_dev == NULL) {
+		return -ENODEV;
+	}
+	
+	const struct iio_device_trigger_config *trigger_config = trigger_dev->config;
+	struct iio_device *trig;
+	int ret = 0;
+
+	trig = trigger_config->ops->create(ctx, trigger_dev, trigger_config->trigger_type, trigger_config->trigger_id);
+	if (!trig) {
+		LOG_ERR("Could not add trigger device.");
+		return -ENOMEM;
+	}
+
+	ret = iio_device_set_trigger(iio_device, trig);
+	if (ret < 0) {
+		LOG_ERR("Could not set trigger.");
+		return ret;
+	}
+
+	trigger_config->ops->init(trigger_dev);
+
+	return ret;
+}
+
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
 	.read_attr = iio_device_io_channels_read_attr,
 	.write_attr = iio_device_io_channels_write_attr,
 	.get_buffer_name = iio_device_io_channels_get_buffer_name,
+	.add_trigger = iio_device_io_channels_add_trigger,
 };
 
 #define DT_DRV_COMPAT iio_io_channels
@@ -820,6 +854,9 @@ static const struct iio_device_io_channels_config iio_device_io_channel_config_#
 	.channels = iio_device_io_channels_##inst,						\
 	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),				\
 	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "buffer"),			\
+	.trigger_dev = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, trigger_device),		\
+		(DEVICE_DT_GET(DT_INST_PHANDLE(inst, trigger_device))),			\
+		(NULL)),								\
 };												\
 												\
 IIO_DEVICE_DT_INST_DEFINE(inst, DT_INST_PROP_OR(inst, io_name, NULL),				\

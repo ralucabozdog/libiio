@@ -9,6 +9,7 @@
 #include <zephyr/logging/log.h>
 #include <iio/iio-backend.h>
 #include <iio_device.h>
+#include <iio_trigger.h>
 
 LOG_MODULE_REGISTER(iio_device_sensor, CONFIG_LIBIIO_LOG_LEVEL);
 
@@ -68,6 +69,8 @@ struct iio_device_sensor_config {
 	const struct device *sensor_dev;
 	const enum sensor_channel *channels;
 	size_t num_channels;
+	const char *buffer_name;
+	const struct device *trigger_dev;
 };
 
 /* bulk fetch — one sensor_sample_fetch(SENSOR_CHAN_ALL) per round,
@@ -191,7 +194,7 @@ static int iio_device_sensor_add_channels(const struct device *dev,
 			.is_signed = map->is_signed,
 			.with_scale = true,
 			.scale     = 0.001,
-			.is_be     = false,
+			.is_be     = true,
 		};
 
 		iio_channel = iio_device_add_channel(iio_device, index, id,
@@ -328,9 +331,57 @@ static int iio_device_sensor_init(const struct device *dev)
 	return 0;
 }
 
+static int iio_device_sensor_add_trigger(struct iio_context *ctx, struct iio_device *iio_device)
+{
+	const struct device *dev = (const struct device *)iio_device_get_pdata(iio_device);
+	const struct iio_device_sensor_config *config = dev->config;
+	const struct device *trigger_dev = config->trigger_dev;
+
+	if (trigger_dev == NULL) {
+		return -ENODEV;
+	}
+
+	const struct iio_device_trigger_config *trigger_config = trigger_dev->config;
+	struct iio_device *trig;
+	int ret = 0;
+
+	trig = trigger_config->ops->create(ctx, trigger_dev, trigger_config->trigger_type, trigger_config->trigger_id);
+	if (!trig) {
+		LOG_ERR("Could not add trigger device.");
+		return -ENOMEM;
+	}
+
+	ret = iio_device_set_trigger(iio_device, trig);
+	if (ret < 0) {
+		LOG_ERR("Could not set trigger.");
+		return ret;
+	}
+
+	trigger_config->ops->init(trigger_dev);
+
+	return ret;
+}
+
+static const char *iio_device_sensor_get_buffer_name(const struct device *dev)
+{
+	const struct iio_device_sensor_config *config = dev->config;
+
+	return config->buffer_name;
+}
+
+static const struct device *iio_device_sensor_get_zephyr_dev(const struct device *dev)
+{
+	const struct iio_device_sensor_config *config = dev->config;
+
+	return config->sensor_dev;
+}
+
 static DEVICE_API(iio_device, iio_device_sensor_driver_api) = {
 	.add_channels   = iio_device_sensor_add_channels,
 	.read_attr      = iio_device_sensor_read_attr,
+	.get_buffer_name = iio_device_sensor_get_buffer_name,
+	.add_trigger    = iio_device_sensor_add_trigger,
+	.get_zephyr_dev = iio_device_sensor_get_zephyr_dev,
 };
 
 #define DT_DRV_COMPAT iio_sensor
@@ -355,6 +406,10 @@ static const struct iio_device_sensor_config				\
 	.sensor_dev  = DEVICE_DT_GET(DT_INST_PHANDLE(inst, sensor_device)),	\
 	.channels    = iio_device_sensor_channels_##inst,			\
 	.num_channels = ARRAY_SIZE(iio_device_sensor_channels_##inst),		\
+	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "buffer"),		\
+	.trigger_dev = COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, trigger_device),	\
+		(DEVICE_DT_GET(DT_INST_PHANDLE(inst, trigger_device))),		\
+		(NULL)),							\
 };										\
 										\
 IIO_DEVICE_DT_INST_DEFINE(inst, DT_INST_PROP_OR(inst, io_name, NULL),		\

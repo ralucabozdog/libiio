@@ -6,5 +6,7 @@ zephyr_syscall_header(${ZEPHYR_LIBIIO_MODULE_DIR}/zephyr/include/iio_device.h)
 zephyr_linker_sources(SECTIONS iio-device-rom.ld)
 zephyr_iterable_section(NAME iio_device_info KVMA RAM_REGION GROUP RODATA_REGION)
 
+zephyr_library_sources_ifdef(CONFIG_DT_HAS_IIO_TRIGGER_TIMER_ENABLED trigger_timer.c)
+zephyr_library_sources_ifdef(CONFIG_DT_HAS_IIO_TRIGGER_ZEPHYR_COMMON_ENABLED trigger_zephyr_common.c)
 zephyr_library_sources_ifdef(CONFIG_LIBIIO_IIO_DEVICE_IO_CHANNELS io_channels.c)
 zephyr_library_sources_ifdef(CONFIG_LIBIIO_IIO_DEVICE_SENSOR sensor.c)

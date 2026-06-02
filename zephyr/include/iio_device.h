@@ -11,10 +11,34 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/iterable_sections.h>
 #include <iio/iio.h>
+#include <iio_trigger.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct iio_buffer_pdata {
+	sys_snode_t node;
+	const struct device *zephyr_dev;
+	const struct iio_device *iio_dev;
+	struct iio_channels_mask *mask;
+	bool enabled;
+	struct k_mutex lock;
+	sys_slist_t pending_blocks;
+	void *trig;
+	// struct zephyr_trigger_state *trig;
+	size_t sample_size;
+};
+
+struct iio_block_pdata {
+	sys_snode_t node;
+	struct iio_buffer_pdata *buf_pdata;
+	void *data;
+	size_t size;
+	size_t bytes_used;
+	bool cyclic;
+	struct k_sem ready_sem;
+};
 
 struct iio_device_info {
 	const char *name;
@@ -64,11 +88,17 @@ typedef int (*iio_device_write_attr_t)(const struct device *dev,
 
 typedef const char *(*iio_device_get_buffer_name_t)(const struct device *dev);
 
+typedef int (*iio_device_add_trigger_t)(struct iio_context *ctx, struct iio_device *iio_device);
+
+typedef const struct device *(*iio_device_get_zephyr_dev_t)(const struct device *dev);
+
 __subsystem struct iio_device_driver_api {
 	iio_device_add_channels_t add_channels;
 	iio_device_read_attr_t read_attr;
 	iio_device_write_attr_t write_attr;
 	iio_device_get_buffer_name_t get_buffer_name;
+	iio_device_add_trigger_t add_trigger;
+	iio_device_get_zephyr_dev_t get_zephyr_dev;
 };
 
 __syscall int iio_device_add_channels(const struct device *dev,
@@ -127,6 +157,33 @@ static inline const char *z_impl_iio_device_get_buffer_name(const struct device 
 	}
 
 	return api->get_buffer_name(dev);
+}
+
+__syscall int iio_device_add_trigger(struct iio_context *ctx, struct iio_device *iio_device);
+
+static inline int z_impl_iio_device_add_trigger(struct iio_context *ctx, struct iio_device *iio_device)
+{
+	const struct device *dev = (const struct device *) iio_device_get_pdata(iio_device);
+	const struct iio_device_driver_api *api = DEVICE_API_GET(iio_device, dev);
+
+	if (api->add_trigger == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->add_trigger(ctx, iio_device);
+}
+
+__syscall const struct device *iio_device_get_zephyr_dev(const struct device *dev);
+
+static inline const struct device *z_impl_iio_device_get_zephyr_dev(const struct device *dev)
+{
+	const struct iio_device_driver_api *api = DEVICE_API_GET(iio_device, dev);
+
+	if (api->get_zephyr_dev == NULL) {
+		return NULL;
+	}
+
+	return api->get_zephyr_dev(dev);
 }
 
 #ifdef __cplusplus
