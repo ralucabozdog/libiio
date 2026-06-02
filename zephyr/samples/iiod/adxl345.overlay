@@ -44,9 +44,9 @@
 		#size-cells = <0>;
 
 		/* IIO Device wrapper for ADXL345 */
-		iio-device@1 {
+		iio-device@2 {
 			compatible = "iio,sensor";
-			reg = <1>;
+			reg = <2>;
 			sensor-device = <&adxl345>;
 			/* Expose 3-axis accelerometer channels via IIO
 			 * ADXL345 provides X, Y, Z acceleration data
@@ -56,7 +56,15 @@
 				IIO_SENSOR_CHAN_ACCEL_Y
 				IIO_SENSOR_CHAN_ACCEL_Z
 			>;
-			buffer-name = "buffer0";
+			buffer-name = "buffer1";
+			trigger-device = <&trigger1>;
+		};
+
+		trigger1: iio-device@3 {
+			compatible = "iio,trigger-zephyr-common";
+			reg = <3>;
+			trigger-id = "trigger1";
+			trigger-type = "zephyr-common";
 		};
 	};
 };

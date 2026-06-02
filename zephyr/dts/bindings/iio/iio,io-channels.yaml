@@ -24,3 +24,7 @@ properties:
     description: |
       Name of the buffer attribute for this IIO device.
       If not specified, defaults to "buffer".
+  trigger-device:
+    type: phandle
+    description: |
+      Phandle to the IIO trigger device node that this device is associated with.

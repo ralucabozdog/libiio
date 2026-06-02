@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Analog Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+include: base.yaml
+
+description: IIO trigger binding
+
+properties:
+  reg:
+    required: true
+  trigger-id:
+    type: string
+    description: |
+      ID of the trigger. Must start with "trigger".
+  trigger-type:
+    type: string
+    enum:
+      - "timer"
+      - "zephyr-common"
+      - "zephyr-stream"
+    description: |
+      Type of trigger mechanism to use.
+      - "timer": software timer-based trigger
+      - "zephyr-common": Zephyr common sensor trigger API
+      - "zephyr-stream": Zephyr streaming (RTIO) API

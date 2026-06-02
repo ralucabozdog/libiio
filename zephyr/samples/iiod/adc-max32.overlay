@@ -10,10 +10,19 @@
 		#size-cells = <0>;
 
 		iio-device@0 {
-			compatible = "iio,adc";
+			compatible = "iio,io-channels";
 			reg = <0>;
 			io-channels = <&adc 0>;
 			io-channel-names = "adc_in_ch0";
+			buffer-name = "buffer0";
+			trigger-device = <&trigger0>;
+		};
+
+		trigger0: iio-device@1 {
+			compatible = "iio,trigger-timer";
+			reg = <1>;
+			trigger-id = "trigger0";
+			trigger-type = "timer";
 		};
 	};
 };
