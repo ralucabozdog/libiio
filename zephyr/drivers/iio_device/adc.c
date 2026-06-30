@@ -1,0 +1,26 @@
+# Copyright (c) 2025 Analog Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+include: base.yaml
+
+description: IIO ADC device
+
+compatible: "iio,adc"
+
+properties:
+  io-channels:
+    required: true
+  io-channel-names:
+    required: true
+  reg:
+    required: true
+  io-name:
+    type: string
+    description: |
+      The device name for use within IIOD. If not set, the device's node will be used
+      as a fallback.
+  buffer-name:
+    type: string
+    description: |
+      Name of the buffer attribute for this IIO device.
+      If not specified, defaults to "buffer".

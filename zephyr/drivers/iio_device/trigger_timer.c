@@ -28,6 +28,12 @@ struct iio_device_trigger_timer_data {
 	bool inited;
 };
 
+/* Dedicated work queue for trigger/readbuf — keeps the system work queue
+ * free for RTIO processing, allowing rtio_cqe_consume_block() in readbuf. */
+static K_KERNEL_STACK_DEFINE(trigger_wq_stack, 4096);
+struct k_work_q trigger_wq;
+static bool trigger_wq_started;
+
 static unsigned iio_trigger_timer_count = 0;
 static const char *const sampling_period_name = "sampling_period";
 
@@ -48,6 +54,15 @@ void iio_device_trigger_timer_init(const struct device *dev)
 	k_mutex_init(&trig_data->lock);
 	k_work_init(&trig_data->work, iio_device_trigger_timer_work_handler);
 	k_timer_init(&trig_data->timer, iio_device_trigger_timer_handler, NULL);
+
+	if (!trigger_wq_started) {
+		k_work_queue_init(&trigger_wq);
+		k_work_queue_start(&trigger_wq, trigger_wq_stack,
+				   K_KERNEL_STACK_SIZEOF(trigger_wq_stack),
+				   K_PRIO_PREEMPT(5), NULL);
+		k_thread_name_set(&trigger_wq.thread, "trig_wq");
+		trigger_wq_started = true;
+	}
 }
 
 struct iio_device * iio_device_trigger_timer_create(struct iio_context *ctx, const struct device *dev,
@@ -95,6 +110,7 @@ int iio_device_trigger_timer_subscribe(sys_snode_t *node)
 
 	sys_slist_append(&trig_data->subscribers, node);
 	trig_data->refcnt++;
+	buf->trig = &trig_data->work;
 
 	if (trig_data->refcnt == 1) {
 		k_timer_start(&trig_data->timer, K_MSEC(trig_data->period_ms),
@@ -129,7 +145,7 @@ void iio_device_trigger_timer_unsubscribe(sys_snode_t *node)
 static void iio_device_trigger_timer_handler(struct k_timer *t)
 {
 	struct iio_device_trigger_timer_data *trig_data = CONTAINER_OF(t, struct iio_device_trigger_timer_data, timer);
-	k_work_submit(&trig_data->work);
+	k_work_submit_to_queue(&trigger_wq, &trig_data->work);
 }
 
 static void iio_device_trigger_timer_work_handler(struct k_work *w)
@@ -261,7 +277,7 @@ static int iio_device_trigger_timer_driver_init(const struct device *dev)
 #define IIO_DEVICE_TRIGGER_TIMER_INIT(inst)							\
 static struct iio_device_trigger_timer_data iio_device_trigger_timer_data_##inst = {			\
 	.inited = false, \
-	.period_ms = 100, \
+	.period_ms = 1, \
 	.refcnt = 0, \
 };												\
 												\
