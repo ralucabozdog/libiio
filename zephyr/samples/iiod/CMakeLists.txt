@@ -27,6 +27,8 @@ if(CONFIG_LIBIIO_IIOD_SENSOR_ADXL345)
   list(APPEND EXTRA_CONF_FILE adxl345.conf)
 endif()
 
+set(EXTRA_DTC_OVERLAY_FILE adc-max32.overlay)
+
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iiod)
 

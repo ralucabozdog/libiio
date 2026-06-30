@@ -15,6 +15,20 @@ config LIBIIO_IIO_DEVICE_FP
 	help
 	  Enable full floating point support, for inputs/outputs
 
+config LIBIIO_IIO_DEVICE_ADC
+	bool "ADC IIO device driver"
+	default y
+	depends on DT_HAS_IIO_ADC_ENABLED && ADC
+	help
+	  Enable the IIO ADC device driver.
+
+config LIBIIO_IIO_DEVICE_ADC_INIT_PRIORITY
+	int "ADC IIO device driver init priority"
+	default 50
+	depends on LIBIIO_IIO_DEVICE_ADC
+	help
+	  Initialization priority of the IIO ADC device driver.
+
 config LIBIIO_IIO_DEVICE_IO_CHANNELS
 	bool "ADC/DAC IO channels driver"
 	default y

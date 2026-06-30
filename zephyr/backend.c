@@ -186,6 +186,12 @@ static int zephyr_enable_buffer(struct iio_buffer_pdata *pdata,
 	trig_config->ops->unsubscribe(&pdata->node);
 	pdata->trig = NULL;
 
+	/* Stop ADC streaming if the driver supports it */
+	const struct iio_device_driver_api *drv_api =
+		DEVICE_API_GET(iio_device, pdata->zephyr_dev);
+	if (drv_api->stop_streaming)
+		drv_api->stop_streaming(pdata->zephyr_dev);
+
 	k_mutex_lock(&pdata->lock, K_FOREVER);
 	sys_snode_t *n;
 	SYS_SLIST_FOR_EACH_NODE(&pdata->pending_blocks, n) {
@@ -229,6 +235,12 @@ static ssize_t zephyr_readbuf(struct iio_buffer_pdata *pdata,
 {
 	const struct device *zephyr_dev = pdata->zephyr_dev;
 	const struct iio_device *iio_dev = pdata->iio_dev;
+	const struct iio_device_driver_api *api =
+		DEVICE_API_GET(iio_device, zephyr_dev);
+
+	if (api->readbuf)
+		return api->readbuf(zephyr_dev, iio_dev, pdata->mask, dst, len);
+
 	uint8_t *out = (uint8_t *)dst;
 	unsigned int nb_channels = iio_device_get_channels_count(iio_dev);
 	char raw_buf[32];
@@ -356,6 +368,12 @@ static int zephyr_enqueue_block(struct iio_block_pdata *pdata, size_t bytes_used
 	k_mutex_lock(&buf->lock, K_FOREVER);
 	sys_slist_append(&buf->pending_blocks, &pdata->node);
 	k_mutex_unlock(&buf->lock);
+
+	if (buf->trig) {
+		extern struct k_work_q trigger_wq;
+
+		k_work_submit_to_queue(&trigger_wq, (struct k_work *)buf->trig);
+	}
 
 	return 0;
 }

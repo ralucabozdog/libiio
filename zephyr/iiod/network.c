@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/posix/sys/socket.h>
 #include <zephyr/posix/arpa/inet.h>
+#include <zephyr/posix/netinet/tcp.h>
 #include <zephyr/posix/unistd.h>
 #include <zephyr/logging/log.h>
 #include <tinyiiod/tinyiiod.h>
@@ -335,6 +336,13 @@ static void iiod_network_server_thread(void *p1, void *p2, void *p3)
 			continue;
 		}
 		LOG_DBG("Accept successful! Client fd: %d", new_fd);
+
+		{
+			int one = 1;
+			if (setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)) < 0) {
+				LOG_WRN("TCP_NODELAY set failed (errno %d)", errno);
+			}
+		}
 
 		inet_ntop(client_addr.sin_family, &client_addr.sin_addr,
 				addr_str, sizeof(addr_str));

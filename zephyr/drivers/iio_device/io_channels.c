@@ -13,6 +13,10 @@
 #include <iio_device.h>
 #include <iio_trigger.h>
 
+#ifdef CONFIG_ADC_STREAM
+#include <zephyr/rtio/rtio.h>
+#endif
+
 LOG_MODULE_REGISTER(iio_device_io_channels, CONFIG_LIBIIO_LOG_LEVEL);
 
 #define IIO_DEVICE_INT_REF_VOL_LEN 6 /* max voltage is 65535 which is 5 digits + null terminator */
@@ -75,6 +79,13 @@ struct iio_device_io_channels_channel_data {
 struct iio_device_io_channels_data {
 	struct iio_device_io_channels_channel_overrides *overrides;
 	struct iio_device_io_channels_channel_data *channels;
+#ifdef CONFIG_ADC_STREAM
+	struct rtio *stream_ctx;
+	struct rtio_iodev *stream_iodev;
+	const struct adc_decoder_api *decoder;
+	struct adc_sequence stream_seq;
+	bool streaming_active;
+#endif
 };
 
 static const char *const raw_name = "raw";
@@ -823,12 +834,370 @@ static int iio_device_io_channels_add_trigger(struct iio_context *ctx, struct ii
 	return ret;
 }
 
+#ifdef CONFIG_ADC_STREAM
+
+static ssize_t iio_device_io_channels_readbuf_stream(const struct device *dev,
+		const struct iio_device *iio_dev,
+		const struct iio_channels_mask *mask,
+		void *dst, size_t len)
+{
+	const struct iio_device_io_channels_config *config = dev->config;
+	struct iio_device_io_channels_data *data = dev->data;
+	unsigned int nb_channels = iio_device_get_channels_count(iio_dev);
+	uint8_t *out = (uint8_t *)dst;
+	int ret;
+
+	/* Lazy-start streaming on first call */
+	if (!data->streaming_active) {
+		/* Drain any stale CQEs from a previous session */
+		struct rtio_cqe *stale;
+
+		while ((stale = rtio_cqe_consume(data->stream_ctx)) != NULL) {
+			uint8_t *sbuf;
+			uint32_t slen;
+
+			if (rtio_cqe_get_mempool_buffer(data->stream_ctx,
+							stale, &sbuf, &slen) == 0)
+				rtio_release_buffer(data->stream_ctx, sbuf, slen);
+			rtio_cqe_release(data->stream_ctx, stale);
+		}
+
+		/* Init sequence with all ADC channels */
+		const struct iio_device_io_channels_channel *first_adc = NULL;
+
+		for (size_t i = 0; i < config->num_channels; i++) {
+			if (config->channels[i].type == IO_CHANNEL_TYPE_ADC) {
+				if (!first_adc) {
+					first_adc = &config->channels[i];
+					ret = adc_sequence_init_dt(&first_adc->adc,
+								   &data->stream_seq);
+					if (ret < 0)
+						return ret;
+				} else {
+					data->stream_seq.channels |=
+						BIT(config->channels[i].adc.channel_id);
+				}
+			}
+		}
+
+		if (!first_adc)
+			return -EINVAL;
+
+		struct adc_read_config *cfg = data->stream_iodev->data;
+
+		cfg->sequence = &data->stream_seq;
+
+		ret = adc_get_decoder(first_adc->adc.dev, &data->decoder);
+		if (ret < 0)
+			return ret;
+
+		ret = adc_stream(data->stream_iodev, data->stream_ctx,
+				 NULL, NULL);
+		if (ret < 0) {
+			LOG_ERR("adc_stream failed: %d", ret);
+			return ret;
+		}
+
+		LOG_INF("ADC streaming started");
+		data->streaming_active = true;
+	}
+
+	/* Determine output format from first enabled channel */
+	const struct iio_data_format *fmt = NULL;
+	size_t bytes_per_channel = 0;
+	unsigned int enabled_count = 0;
+
+	for (unsigned int i = 0; i < nb_channels; i++) {
+		const struct iio_channel *chn =
+			iio_device_get_channel(iio_dev, i);
+
+		if (!iio_channel_is_scan_element(chn) ||
+		    !iio_channel_is_enabled(chn, mask))
+			continue;
+
+		if (!fmt) {
+			fmt = iio_channel_get_data_format(chn);
+			bytes_per_channel = DIV_ROUND_UP(fmt->length,
+							 BITS_PER_BYTE);
+		}
+		enabled_count++;
+	}
+
+	if (!enabled_count || !fmt)
+		return -EINVAL;
+
+	size_t bytes_per_sample = enabled_count * bytes_per_channel;
+	size_t total_samples = len / bytes_per_sample;
+
+	if (total_samples == 0)
+		return -EINVAL;
+
+	size_t samples_written = 0;
+
+	while (samples_written < total_samples) {
+		struct rtio_cqe *cqe;
+		uint8_t *buf;
+		uint32_t buf_len;
+		uint16_t frame_count;
+
+		cqe = rtio_cqe_consume(data->stream_ctx);
+		if (!cqe) {
+			/* Yield to let RTIO/ADC ISR produce CQEs.
+			 * Safe: readbuf runs on the dedicated trigger
+			 * work queue, not the system one. */
+			k_yield();
+			cqe = rtio_cqe_consume(data->stream_ctx);
+			if (!cqe) {
+				if (samples_written > 0)
+					break;
+				return -ETIMEDOUT;
+			}
+		}
+		if (cqe->result != 0) {
+			rtio_cqe_release(data->stream_ctx, cqe);
+			if (samples_written > 0)
+				break;
+			return -EIO;
+		}
+
+		ret = rtio_cqe_get_mempool_buffer(data->stream_ctx, cqe,
+						  &buf, &buf_len);
+		rtio_cqe_release(data->stream_ctx, cqe);
+		if (ret != 0) {
+			if (samples_written > 0)
+				break;
+			return ret;
+		}
+
+		/* Decode frames from this CQE using the portable decoder API */
+		ret = data->decoder->get_frame_count(buf, 0, &frame_count);
+		if (ret != 0 || frame_count == 0) {
+			rtio_release_buffer(data->stream_ctx, buf, buf_len);
+			continue;
+		}
+
+		uint32_t fit = 0;
+		struct adc_data adc_data = {0};
+
+		for (uint16_t f = 0;
+		     f < frame_count && samples_written < total_samples;
+		     f++) {
+			ret = data->decoder->decode(buf, 0, &fit, 1, &adc_data);
+			if (ret <= 0)
+				break;
+
+			/* Convert Q31 back to raw value.
+			 * Q31 value = raw * 2^(31-shift) / full_scale
+			 * raw = value >> (31 - resolution)
+			 * The shift from decoder tells us the scaling. */
+			int32_t raw = adc_data.readings[0].value;
+
+			if (adc_data.shift > 0)
+				raw >>= adc_data.shift;
+
+			raw <<= fmt->shift;
+
+			uint8_t *dest = out + samples_written * bytes_per_sample;
+
+			if (fmt->is_be) {
+				for (int b = bytes_per_channel - 1; b >= 0; b--)
+					dest[bytes_per_channel - 1 - b] =
+						(uint8_t)((raw >> (b * 8)) & 0xFF);
+			} else {
+				for (size_t b = 0; b < bytes_per_channel; b++)
+					dest[b] =
+						(uint8_t)((raw >> (b * 8)) & 0xFF);
+			}
+
+			samples_written++;
+		}
+
+		rtio_release_buffer(data->stream_ctx, buf, buf_len);
+	}
+
+	return (ssize_t)(samples_written * bytes_per_sample);
+}
+
+#endif /* CONFIG_ADC_STREAM */
+
+#define READBUF_CHUNK_SAMPLES 256
+#define READBUF_MAX_ENABLED_CHANNELS 8
+
+struct readbuf_channel_info {
+	int config_index;
+	const struct adc_dt_spec *adc_spec;
+	const struct iio_data_format *fmt;
+	size_t bytes_per_channel;
+	size_t byte_offset;
+};
+
+static ssize_t iio_device_io_channels_readbuf(const struct device *dev,
+		const struct iio_device *iio_dev,
+		const struct iio_channels_mask *mask,
+		void *dst, size_t len)
+{
+#ifdef CONFIG_ADC_STREAM
+	struct iio_device_io_channels_data *sdata = dev->data;
+
+	if (sdata->stream_ctx)
+		return iio_device_io_channels_readbuf_stream(dev, iio_dev,
+							     mask, dst, len);
+#endif
+
+	const struct iio_device_io_channels_config *config = dev->config;
+	struct iio_device_io_channels_data *data = dev->data;
+	unsigned int nb_channels = iio_device_get_channels_count(iio_dev);
+	struct readbuf_channel_info ch_info[READBUF_MAX_ENABLED_CHANNELS];
+	unsigned int enabled_count = 0;
+	size_t bytes_per_sample = 0;
+
+	for (unsigned int ch_idx = 0;
+	     ch_idx < nb_channels && enabled_count < READBUF_MAX_ENABLED_CHANNELS;
+	     ch_idx++) {
+		const struct iio_channel *chn =
+			iio_device_get_channel(iio_dev, ch_idx);
+
+		if (!iio_channel_is_scan_element(chn) ||
+		    !iio_channel_is_enabled(chn, mask))
+			continue;
+
+		int cfg_idx = (int)(intptr_t)iio_channel_get_pdata(chn);
+
+		if (cfg_idx < 0 || cfg_idx >= config->num_channels)
+			return -EINVAL;
+
+		struct readbuf_channel_info *ci = &ch_info[enabled_count];
+		int adc_idx;
+
+		if (config->channels[cfg_idx].type == IO_CHANNEL_TYPE_DAC) {
+			adc_idx = data->channels[cfg_idx].dac.adc_channel_idx;
+			if (adc_idx == IO_CHANNEL_DAC_ADC_CHANNEL_IDX_NONE)
+				return -ENODEV;
+		} else {
+			adc_idx = cfg_idx;
+		}
+
+		ci->config_index = cfg_idx;
+		ci->adc_spec = &config->channels[adc_idx].adc;
+		ci->fmt = iio_channel_get_data_format(chn);
+		ci->bytes_per_channel = DIV_ROUND_UP(ci->fmt->length,
+						     BITS_PER_BYTE);
+		ci->byte_offset = bytes_per_sample;
+		bytes_per_sample += ci->bytes_per_channel;
+		enabled_count++;
+	}
+
+	if (enabled_count == 0 || bytes_per_sample == 0)
+		return -EINVAL;
+
+	size_t total_samples = len / bytes_per_sample;
+
+	if (total_samples == 0)
+		return -EINVAL;
+
+	uint8_t *out = (uint8_t *)dst;
+
+	for (unsigned int ch = 0; ch < enabled_count; ch++) {
+		struct readbuf_channel_info *ci = &ch_info[ch];
+		size_t adc_sample_size = (ci->adc_spec->resolution <= 16)
+			? sizeof(uint16_t) : sizeof(uint32_t);
+		size_t samples_done = 0;
+
+		while (samples_done < total_samples) {
+			size_t chunk = MIN(READBUF_CHUNK_SAMPLES,
+					   total_samples - samples_done);
+			uint8_t adc_buf[READBUF_CHUNK_SAMPLES * sizeof(uint32_t)];
+			int ret;
+
+			struct adc_sequence_options opts = {
+				.interval_us = 0,
+				.callback = NULL,
+				.user_data = NULL,
+				.extra_samplings = (chunk > 1)
+					? (uint16_t)(chunk - 1) : 0,
+			};
+			struct adc_sequence sequence = {
+				.options = (chunk > 1) ? &opts : NULL,
+				.buffer = adc_buf,
+				.buffer_size = chunk * adc_sample_size,
+			};
+
+			ret = adc_sequence_init_dt(ci->adc_spec, &sequence);
+			if (ret < 0)
+				return ret;
+
+			ret = adc_read_dt(ci->adc_spec, &sequence);
+			if (ret < 0)
+				return ret;
+
+			for (size_t s = 0; s < chunk; s++) {
+				int32_t raw;
+
+				if (adc_sample_size == sizeof(uint16_t))
+					raw = (int32_t)((uint16_t *)adc_buf)[s];
+				else
+					raw = (int32_t)((uint32_t *)adc_buf)[s];
+
+				raw <<= ci->fmt->shift;
+
+				uint8_t *dest = out
+					+ (samples_done + s) * bytes_per_sample
+					+ ci->byte_offset;
+				size_t bpc = ci->bytes_per_channel;
+
+				if (ci->fmt->is_be) {
+					for (int b = bpc - 1; b >= 0; b--)
+						dest[bpc - 1 - b] =
+							(uint8_t)((raw >> (b * 8)) & 0xFF);
+				} else {
+					for (size_t b = 0; b < bpc; b++)
+						dest[b] =
+							(uint8_t)((raw >> (b * 8)) & 0xFF);
+				}
+			}
+
+			samples_done += chunk;
+		}
+	}
+
+	return (ssize_t)(total_samples * bytes_per_sample);
+}
+
+#ifdef CONFIG_ADC_STREAM
+static void iio_device_io_channels_stop_streaming(const struct device *dev)
+{
+	struct iio_device_io_channels_data *data = dev->data;
+
+	if (!data->stream_ctx)
+		return;
+
+	/* Drain unconsumed CQEs to free mempool blocks.
+	 * Do NOT clear streaming_active — the stream keeps running.
+	 * adc_stream() must only be called once per boot. */
+	struct rtio_cqe *cqe;
+
+	while ((cqe = rtio_cqe_consume(data->stream_ctx)) != NULL) {
+		uint8_t *buf;
+		uint32_t buf_len;
+
+		if (rtio_cqe_get_mempool_buffer(data->stream_ctx,
+						cqe, &buf, &buf_len) == 0)
+			rtio_release_buffer(data->stream_ctx, buf, buf_len);
+		rtio_cqe_release(data->stream_ctx, cqe);
+	}
+}
+#endif
+
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
 	.read_attr = iio_device_io_channels_read_attr,
 	.write_attr = iio_device_io_channels_write_attr,
 	.get_buffer_name = iio_device_io_channels_get_buffer_name,
 	.add_trigger = iio_device_io_channels_add_trigger,
+	.readbuf = iio_device_io_channels_readbuf,
+#ifdef CONFIG_ADC_STREAM
+	.stop_streaming = iio_device_io_channels_stop_streaming,
+#endif
 };
 
 #define DT_DRV_COMPAT iio_io_channels
@@ -837,12 +1206,36 @@ static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
         COND_CODE_1(DT_PHA_HAS_CELL_AT_IDX(node_id, prop, idx, input), \
                     ({ .type = IO_CHANNEL_TYPE_ADC, .name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .adc = ADC_DT_SPEC_GET_BY_IDX(node_id, idx) }), ({.name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .type = IO_CHANNEL_TYPE_DAC, .dac = DAC_DT_SPEC_GET_BY_IDX(node_id, idx)}))
 
+/* Extract only ADC dt specs for streaming (filter out DAC) */
+#ifdef CONFIG_ADC_STREAM
+#define IIO_ADC_STREAM_SPEC(node_id, prop, idx)						\
+        COND_CODE_1(DT_PHA_HAS_CELL_AT_IDX(node_id, prop, idx, input),			\
+                    (ADC_DT_SPEC_GET_BY_IDX(node_id, idx),), ())
+
+#define IIO_DEVICE_IO_CHANNELS_STREAM_INIT(inst)					\
+static const struct adc_dt_spec iio_adc_stream_specs_##inst[] = {			\
+	DT_INST_FOREACH_PROP_ELEM(inst, io_channels, IIO_ADC_STREAM_SPEC)		\
+};											\
+ADC_DT_STREAM_IODEV(iio_adc_stream_iodev_##inst,					\
+	DT_PHANDLE_BY_IDX(DT_DRV_INST(inst), io_channels, 0),				\
+	iio_adc_stream_specs_##inst,							\
+	{ADC_TRIG_FIFO_FULL, ADC_STREAM_DATA_INCLUDE});					\
+RTIO_DEFINE_WITH_MEMPOOL(iio_adc_stream_ctx_##inst, 4, 4, 32, 64, sizeof(void *));
+#else
+#define IIO_DEVICE_IO_CHANNELS_STREAM_INIT(inst)
+#endif
+
 #define IIO_DEVICE_IO_CHANNELS_INIT(inst)							\
+IIO_DEVICE_IO_CHANNELS_STREAM_INIT(inst)						\
 static struct iio_device_io_channels_channel_overrides iio_device_io_channel_overrides_##inst[DT_INST_PROP_LEN(inst, io_channels)];	\
 static struct iio_device_io_channels_channel_data iio_device_io_channel_channel_data_##inst[DT_INST_PROP_LEN(inst, io_channels)];	\
 static struct iio_device_io_channels_data iio_device_io_channel_data_##inst = {			\
 	.overrides = iio_device_io_channel_overrides_##inst,					\
 	.channels = iio_device_io_channel_channel_data_##inst,					\
+	IF_ENABLED(CONFIG_ADC_STREAM, (							\
+		.stream_ctx = &iio_adc_stream_ctx_##inst,					\
+		.stream_iodev = &iio_adc_stream_iodev_##inst,					\
+	))											\
 };												\
 												\
 static const struct iio_device_io_channels_channel iio_device_io_channels_##inst[] = {		\

@@ -13,7 +13,7 @@
 			compatible = "iio,io-channels";
 			reg = <0>;
 			io-channels = <&adc 0>;
-			io-channel-names = "adc_in_ch0";
+			io-channel-names = "voltage0";
 			buffer-name = "buffer0";
 			trigger-device = <&trigger0>;
 		};
@@ -32,7 +32,8 @@
 };
 
 &adc {
-	/*clocks = */ 
+	/* Override compatible to enable streaming/FIFO support */
+	compatible = "adi,max32-adc-b-me18", "adi,max32-adc";
 	pinctrl-0 = <&adc_clk_ext_p0_9>;
 	pinctrl-names = "default";
 

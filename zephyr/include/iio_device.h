@@ -92,6 +92,13 @@ typedef int (*iio_device_add_trigger_t)(struct iio_context *ctx, struct iio_devi
 
 typedef const struct device *(*iio_device_get_zephyr_dev_t)(const struct device *dev);
 
+typedef ssize_t (*iio_device_readbuf_t)(const struct device *dev,
+		const struct iio_device *iio_dev,
+		const struct iio_channels_mask *mask,
+		void *dst, size_t len);
+
+typedef void (*iio_device_stop_streaming_t)(const struct device *dev);
+
 __subsystem struct iio_device_driver_api {
 	iio_device_add_channels_t add_channels;
 	iio_device_read_attr_t read_attr;
@@ -99,6 +106,8 @@ __subsystem struct iio_device_driver_api {
 	iio_device_get_buffer_name_t get_buffer_name;
 	iio_device_add_trigger_t add_trigger;
 	iio_device_get_zephyr_dev_t get_zephyr_dev;
+	iio_device_readbuf_t readbuf;
+	iio_device_stop_streaming_t stop_streaming;
 };
 
 __syscall int iio_device_add_channels(const struct device *dev,
