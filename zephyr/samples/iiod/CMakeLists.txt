@@ -18,7 +18,9 @@ if(CONFIG_LIBIIO_IIOD_MULTI_SENSOR_EMUL)
   list(APPEND EXTRA_CONF_FILE sensor-emul.conf)
 endif()
 
-set(EXTRA_DTC_OVERLAY_FILE adc-max32.overlay)
+if(CONFIG_ADC_MAX32)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE adc-max32.overlay)
+endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iiod)

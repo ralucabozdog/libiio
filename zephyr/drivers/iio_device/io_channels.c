@@ -12,6 +12,7 @@
 #include <iio/iio-backend.h>
 #include <iio_device.h>
 #include <iio_trigger.h>
+#include <iio_bulk.h>
 
 #ifdef CONFIG_ADC_STREAM
 #include <zephyr/rtio/rtio.h>
@@ -1031,11 +1032,205 @@ struct readbuf_channel_info {
 	size_t byte_offset;
 };
 
+/*
+ * Bulk capture constants.
+ *
+ * DMA directly into the caller's dst buffer (which the iiod layer allocates
+ * from a 32-byte-aligned pool). ad463x_read_buffer() flushes+invalidates the
+ * destination cache range itself, so we do not need a separate __nocache
+ * scratch — removing the scratch eliminates one full-buffer memcpy and,
+ * crucially, eliminates the chunking loop that was restarting the PWMGEN/DMA
+ * engine for every 4096-sample slice.
+ */
+#define IO_CH_MAX_WORDS_PER_SAMPLE	2
+#define IO_CH_MAX_ENABLED_CHANNELS	32
+
+struct io_ch_layout {
+	unsigned int words_per_sample;
+	unsigned int enabled_channels;
+	unsigned int word_off[IO_CH_MAX_ENABLED_CHANNELS];
+	size_t bytes_per_channel;
+	size_t bytes_per_sample;
+	uint8_t shift;
+	bool is_be;
+};
+
+static K_MUTEX_DEFINE(io_ch_capture_lock);
+
+static int io_ch_resolve_layout(const struct device *dev,
+				const struct iio_device *iio_dev,
+				const struct iio_channels_mask *mask,
+				struct io_ch_layout *out,
+				const struct device **adc_dev_out,
+				const struct iio_bulk_capture_api **bulk_out)
+{
+	const struct iio_device_io_channels_config *config = dev->config;
+	unsigned int nb_channels = iio_device_get_channels_count(iio_dev);
+	const struct device *adc_dev = NULL;
+
+	for (size_t i = 0; i < config->num_channels; i++) {
+		if (config->channels[i].type == IO_CHANNEL_TYPE_ADC) {
+			adc_dev = config->channels[i].adc.dev;
+			break;
+		}
+	}
+	if (!adc_dev) {
+		return -ENOSYS;
+	}
+
+	const struct iio_bulk_capture_api *bulk = iio_bulk_capture_find(adc_dev);
+
+	if (!bulk || !bulk->word_map || bulk->words_per_sample == 0 ||
+	    bulk->words_per_sample > IO_CH_MAX_WORDS_PER_SAMPLE) {
+		return -ENOSYS;
+	}
+
+	out->words_per_sample = bulk->words_per_sample;
+	out->enabled_channels = 0;
+
+	const struct iio_channel *first_chn = NULL;
+
+	for (unsigned int ch = 0; ch < nb_channels; ch++) {
+		const struct iio_channel *chn = iio_device_get_channel(iio_dev, ch);
+
+		if (!iio_channel_is_scan_element(chn) ||
+		    !iio_channel_is_enabled(chn, mask)) {
+			continue;
+		}
+		if (out->enabled_channels >= IO_CH_MAX_ENABLED_CHANNELS) {
+			LOG_ERR("too many enabled channels");
+			return -EINVAL;
+		}
+		int phys = (int)(intptr_t)iio_channel_get_pdata(chn);
+
+		out->word_off[out->enabled_channels] = bulk->word_map[phys];
+		if (!first_chn) {
+			first_chn = chn;
+		}
+		out->enabled_channels++;
+	}
+	if (out->enabled_channels == 0 || !first_chn) {
+		return -EINVAL;
+	}
+
+	const struct iio_data_format *fmt = iio_channel_get_data_format(first_chn);
+
+	out->shift = fmt->shift;
+	out->is_be = fmt->is_be;
+	out->bytes_per_channel = DIV_ROUND_UP(fmt->length, BITS_PER_BYTE);
+	out->bytes_per_sample = out->enabled_channels * out->bytes_per_channel;
+
+	if (adc_dev_out) {
+		*adc_dev_out = adc_dev;
+	}
+	if (bulk_out) {
+		*bulk_out = bulk;
+	}
+	return 0;
+}
+
+static size_t io_ch_repack(const struct io_ch_layout *L,
+			   const uint32_t *raw, size_t n_samples, uint8_t *dst)
+{
+	const unsigned int wps = L->words_per_sample;
+	const unsigned int nch = L->enabled_channels;
+	const size_t bpc = L->bytes_per_channel;
+	const uint8_t shift = L->shift;
+	uint8_t *out = dst;
+
+	for (size_t s = 0; s < n_samples; s++, raw += wps) {
+		for (unsigned int e = 0; e < nch; e++) {
+			int32_t v = (int32_t)raw[L->word_off[e]] << shift;
+
+			if (L->is_be) {
+				for (int b = bpc - 1; b >= 0; b--) {
+					*out++ = (uint8_t)((v >> (b * 8)) & 0xFF);
+				}
+			} else {
+				for (size_t b = 0; b < bpc; b++) {
+					*out++ = (uint8_t)((v >> (b * 8)) & 0xFF);
+				}
+			}
+		}
+	}
+	return (size_t)(out - dst);
+}
+
+static ssize_t io_ch_bulk_readbuf(const struct device *dev,
+				  const struct iio_device *iio_dev,
+				  const struct iio_channels_mask *mask,
+				  void *dst, size_t len)
+{
+	struct io_ch_layout L;
+	const struct device *adc_dev = NULL;
+	const struct iio_bulk_capture_api *bulk = NULL;
+	int ret;
+
+	ret = io_ch_resolve_layout(dev, iio_dev, mask, &L, &adc_dev, &bulk);
+	if (ret) {
+		return ret;
+	}
+	if (!bulk->read) {
+		return -ENOSYS;
+	}
+
+	const size_t raw_sample_bytes = L.words_per_sample * sizeof(uint32_t);
+	size_t total_samples = len / L.bytes_per_sample;
+
+	if (total_samples == 0) {
+		return -ENOMEM;
+	}
+
+	/*
+	 * DMA the whole request directly into dst in one shot.
+	 *
+	 * dst must hold at least total_samples * raw_sample_bytes bytes of raw
+	 * data before the repack expands it to total_samples * bytes_per_sample.
+	 * raw_sample_bytes <= bytes_per_sample always (raw is packed 32-bit words,
+	 * wire format is at least as wide), so the raw DMA fits inside the already-
+	 * allocated len bytes. ad463x_read_buffer() handles cache flush+invalidate.
+	 */
+	size_t raw_len = total_samples * raw_sample_bytes;
+
+	if (raw_len > len) {
+		/* Shouldn't happen since raw_sample_bytes <= bytes_per_sample,
+		 * but guard anyway.
+		 */
+		raw_len = len;
+		total_samples = raw_len / raw_sample_bytes;
+	}
+
+	k_mutex_lock(&io_ch_capture_lock, K_FOREVER);
+
+	ssize_t got = bulk->read(adc_dev, dst, raw_len);
+
+	if (got < 0) {
+		k_mutex_unlock(&io_ch_capture_lock);
+		return got;
+	}
+
+	size_t captured = (size_t)got / raw_sample_bytes;
+
+	/* Repack raw words → wire bytes in-place (src offset < dst offset). */
+	io_ch_repack(&L, (const uint32_t *)dst, captured, (uint8_t *)dst);
+
+	k_mutex_unlock(&io_ch_capture_lock);
+
+	return (ssize_t)(captured * L.bytes_per_sample);
+}
+
 static ssize_t iio_device_io_channels_readbuf(const struct device *dev,
 		const struct iio_device *iio_dev,
 		const struct iio_channels_mask *mask,
 		void *dst, size_t len)
 {
+	/* Bulk DMA fast path — try before RTIO/ADC_STREAM or per-sample fallback. */
+	ssize_t fast = io_ch_bulk_readbuf(dev, iio_dev, mask, dst, len);
+
+	if (fast != -ENOSYS) {
+		return fast;
+	}
+
 #ifdef CONFIG_ADC_STREAM
 	struct iio_device_io_channels_data *sdata = dev->data;
 

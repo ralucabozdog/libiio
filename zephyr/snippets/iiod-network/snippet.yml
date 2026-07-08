@@ -8,3 +8,6 @@ boards:
   /native_sim.*/:
     append:
       EXTRA_CONF_FILE: boards/native_sim.conf
+  zedboard/xc7z020:
+    append:
+      EXTRA_CONF_FILE: iiod-network-zedboard.conf

@@ -10,6 +10,15 @@ config ADC_EMUL_GENERATOR
 	default y
 	depends on DT_HAS_IIO_ADC_EMUL_GENERATOR_ENABLED && ADC_EMUL
 
+config LIBIIO_AD463X_IIO_PROVIDER
+	bool "AD463x bulk-capture IIO provider"
+	default y
+	depends on ADC_AD463X
+	help
+	  Register the AD463x driver's ad463x_read_buffer() into the libiio
+	  bulk-capture iterable section so io_channels can use DMA capture
+	  instead of the per-sample ADC API shim.
+
 endmenu
 
 endif # ADC
