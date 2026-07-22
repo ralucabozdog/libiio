@@ -78,4 +78,9 @@ static inline struct iio_trigger_node *iio_trigger_node_get(struct iio_trigger_l
 	return node ? CONTAINER_OF(node, struct iio_trigger_node, node) : NULL;
 }
 
+static inline bool iio_trigger_list_is_empty(struct iio_trigger_list *list)
+{
+	return sys_slist_is_empty(&list->list);
+}
+
 #endif /* ZEPHYR_INCLUDE_IIO_TRIGGER_NODE_H_ */
