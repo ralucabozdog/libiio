@@ -1,0 +1,35 @@
+/*
+ * Copyright (c) 2025 Analog Devices, Inc.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#include <zephyr/dt-bindings/i2c/i2c.h>
+#include <zephyr/dt-bindings/sensor/adxl345.h>
+#include <dt-bindings/iio/sensor-channels.h>
+
+/ {
+	/* IIO Context for libiio */
+	iio-context {
+		/* IIO Device wrapper for ADXL345 */
+		/* ADXL345 3-axis Accelerometer */
+		adxl345 {
+			compatible = "iio,sensor";
+			sensor-device = <&adxl345_pmod_acl>;
+			sensor-channels = <
+				IIO_SENSOR_CHAN_ACCEL_X
+				IIO_SENSOR_CHAN_ACCEL_Y
+				IIO_SENSOR_CHAN_ACCEL_Z
+			>;
+			buffer-name = "buffer0";
+			io-name = "adxl345";
+
+			trigger_adxl345_stream {
+				compatible = "iio,trigger-sensor-stream";
+				io-name = "trigger_sensor_stream0";
+				trigger-id = "trigger1";
+				sensor-stream-channels = <IIO_SENSOR_CHAN_ACCEL_XYZ>;
+			};
+		};
+	};
+};

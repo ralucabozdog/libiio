@@ -3,6 +3,21 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
+if(eval_ad4052_ardz IN_LIST SHIELD)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
+endif()
+
+if(eval_adxl362_ardz IN_LIST SHIELD)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE eval_adxl362_ardz.overlay)
+  list(APPEND EXTRA_CONF_FILE eval_adxl362_ardz.conf)
+endif()
+
+if(pmod_acl IN_LIST SHIELD AND NOT CONFIG_LIBIIO_IIOD_SENSOR_ADXL345_STREAM 
+    AND NOT CONFIG_LIBIIO_IIOD_SENSOR_ADXL345)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE pmod_acl.overlay)
+  list(APPEND EXTRA_CONF_FILE pmod_acl.conf)
+endif()
+
 if(CONFIG_LIBIIO_IIOD_ADC_EMUL)
   list(APPEND EXTRA_DTC_OVERLAY_FILE adc-emul.overlay)
   list(APPEND EXTRA_CONF_FILE adc-emul.conf)
@@ -16,6 +31,16 @@ endif()
 if(CONFIG_LIBIIO_IIOD_MULTI_SENSOR_EMUL)
   list(APPEND EXTRA_DTC_OVERLAY_FILE multi-sensor-emul.overlay)
   list(APPEND EXTRA_CONF_FILE sensor-emul.conf)
+endif()
+
+if(CONFIG_LIBIIO_IIOD_SENSOR_ADXL345)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE adxl345.overlay)
+  list(APPEND EXTRA_CONF_FILE adxl345.conf)
+endif()
+
+if(CONFIG_LIBIIO_IIOD_SENSOR_ADXL345_STREAM)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE adxl345_stream.overlay)
+  list(APPEND EXTRA_CONF_FILE adxl345_stream.conf)
 endif()
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
