@@ -31,12 +31,15 @@ typedef int (*iio_trigger_subscribe_t)(struct iio_trigger_node *node);
 
 typedef void (*iio_trigger_unsubscribe_t)(struct iio_trigger_node *node);
 
+typedef void (*iio_trigger_submit_work_t)(struct iio_trigger_node *node);
+
 __subsystem struct iio_trigger_driver_api {
 	struct iio_attr_driver_api attr_api;
 	iio_trigger_create_t create;
 	iio_trigger_init_t init;
 	iio_trigger_subscribe_t subscribe;
 	iio_trigger_unsubscribe_t unsubscribe;
+	iio_trigger_submit_work_t submit_work;
 };
 
 DEVICE_API_EXTENDS(iio_trigger, iio_attr, attr_api);
@@ -93,6 +96,19 @@ static inline void z_impl_iio_trigger_unsubscribe(const struct device *trigg_iio
 	}
 
 	api->unsubscribe(node);
+}
+
+__syscall void iio_trigger_submit_work(const struct device *trigg_iio_dev, struct iio_trigger_node *node);
+
+static inline void z_impl_iio_trigger_submit_work(const struct device *trigg_iio_dev, struct iio_trigger_node *node)
+{
+	const struct iio_trigger_driver_api *api = DEVICE_API_GET(iio_trigger, trigg_iio_dev);
+
+	if (api->submit_work == NULL) {
+		return;
+	}
+
+	api->submit_work(node);
 }
 
 #ifdef __cplusplus

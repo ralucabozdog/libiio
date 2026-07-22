@@ -60,4 +60,6 @@ config LIBIIO_IIO_DEVICE_TRIGGER_TIMER_INIT_PRIORITY
 	  Has to be same or higher than the initialization priority of the io-channel iio
 	  device drivers.
 
+rsource "Kconfig.trigger_sensor_stream"
+
 endif # LIBIIO_IIO_DEVICE
