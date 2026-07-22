@@ -25,6 +25,11 @@ config LIBIIO_IIOD_SENSOR_ADXL345
 	help
 	  Enable adxl345 sensor IIO device driver.
 
+config LIBIIO_IIOD_SENSOR_ADXL345_STREAM
+	bool "Enable adxl345 sensor stream"
+	help
+	  Enable adxl345 sensor stream.
+
 endmenu
 
 source "Kconfig.zephyr"
