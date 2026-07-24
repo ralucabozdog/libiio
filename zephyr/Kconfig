@@ -13,6 +13,42 @@ module = LIBIIO
 module-str = libiio
 source "subsys/logging/Kconfig.template.log_config"
 
+config LIBIIO_MULTITHREADING
+	bool "Enable libiio multi-threading support"
+	default n
+	help
+	  Enable real threading for the libiio responder and task system.
+	  When enabled, the iiod responder uses separate reader, writer,
+	  and buffer task threads, allowing pipelined block processing.
+	  When disabled, all processing is single-threaded (lower overhead,
+	  less RAM, suitable for constrained devices).
+
+if LIBIIO_MULTITHREADING
+
+config LIBIIO_THREAD_POOL_SIZE
+	int "Maximum number of libiio internal threads"
+	default 8
+	help
+	  Maximum number of concurrent threads that libiio can create
+	  for the iiod responder, task processing, and buffer I/O.
+	  Each thread uses LIBIIO_THREAD_STACK_SIZE bytes of static RAM.
+	  Minimum 5 threads per client (reader, writer, enqueue, dequeue,
+	  stream worker).
+
+config LIBIIO_THREAD_STACK_SIZE
+	int "Stack size for libiio internal threads"
+	default 4096
+	help
+	  Stack size in bytes for each libiio internal thread.
+
+config LIBIIO_THREAD_PRIORITY
+	int "Priority for libiio internal threads"
+	default 5
+	help
+	  Scheduling priority for libiio internal threads.
+
+endif # LIBIIO_MULTITHREADING
+
 rsource "drivers/Kconfig"
 rsource "iiod/Kconfig"
 
