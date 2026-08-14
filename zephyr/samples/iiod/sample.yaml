@@ -118,3 +118,12 @@ tests:
       - EXTRA_DTC_OVERLAY_FILE=adc-max32.overlay
     platform_allow:
       - apard32690/max32690/m4
+  
+  sample.iiod.console.eval_ad4052_ardz_stream:
+    extra_args:
+      - SNIPPET=iiod-console
+      - EXTRA_DTC_OVERLAY_FILE=eval_ad4052_ardz_stream.overlay
+      - OVERLAY_CONFIG=eval_ad4052_ardz_stream.conf
+      - SHIELD=eval_ad4052_ardz
+    platform_allow:
+      - apard32690/max32690/m4

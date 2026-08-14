@@ -1,0 +1,23 @@
+/*
+ * Copyright (c) 2025 Analog Devices, Inc.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+/ {
+	iio-context {
+		iio-adcs {
+			/delete-node/ trigger_ad4052;
+
+			ad4052 {
+				/delete-property/ trigger-device;
+
+				trigger_ad4052_stream {
+					compatible = "iio,trigger-io-channels-stream";
+					io-name = "trigger_io_channels_stream0";
+					trigger-id = "trigger0";
+				};
+			};
+		};
+	};
+};
