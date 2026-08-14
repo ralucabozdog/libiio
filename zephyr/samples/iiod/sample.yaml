@@ -192,3 +192,11 @@ tests:
     extra_args:
       - SHIELD="adafruit_lis3dh;iio_adafruit_lis3dh;adafruit_aht20;iio_adafruit_aht20;adafruit_veml7700;iio_adafruit_veml7700;adafruit_ism330dhcx;iio_adafruit_ism330dhcx"
 
+  sample.iiod.console.eval_ad4052_ardz_stream:
+    extra_args:
+      - SNIPPET=iiod-console
+      - EXTRA_DTC_OVERLAY_FILE=eval_ad4052_ardz_stream.overlay
+      - OVERLAY_CONFIG=eval_ad4052_ardz_stream.conf
+      - SHIELD=eval_ad4052_ardz
+    platform_allow:
+      - apard32690/max32690/m4

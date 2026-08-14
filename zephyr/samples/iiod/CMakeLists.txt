@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.20.0)
 
-if(eval_ad4052_ardz IN_LIST SHIELD)
+if(eval_ad4052_ardz IN_LIST SHIELD AND NOT CONFIG_AD405X_STREAM)
   list(APPEND EXTRA_DTC_OVERLAY_FILE eval_ad4052_ardz.overlay)
 endif()
 
