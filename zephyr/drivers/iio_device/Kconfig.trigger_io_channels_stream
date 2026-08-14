@@ -1,0 +1,50 @@
+# Copyright (c) 2026 Analog Devices, Inc.
+# SPDX-License-Identifier: MIT
+
+if DT_HAS_IIO_TRIGGER_IO_CHANNELS_STREAM_ENABLED
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_INIT_PRIORITY
+	int "Trigger driver init priority"
+	default 100
+	help
+	  Initialization priority of the Trigger I/O Channels Stream iio device driver class.
+	  Has to be same or higher than the initialization priority of the io_channels 
+	  iio device drivers.
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_THREAD_STACK_SIZE
+	int "Stream trigger thread stack size"
+	default 2048
+	help
+	  Stack size of thread used by the trigger io_channels stream driver to handle reading from RTIO.
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_THREAD_PRIORITY
+	int "Thread priority"
+	default 15
+	help
+	  Priority of thread used by the trigger io_channels stream driver to handle reading from RTIO.
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_SQ_SZ
+	int "Size of the submission queue"
+	default 16
+	help
+	  Size of the submission queue, must be power of 2.
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_CQ_SZ
+	int "Size of the completion queue"
+	default 16
+	help
+	  Size of the completion queue, must be power of 2.
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_NUM_BLKS
+	int "Number of blocks"
+	default 200
+	help
+	  Number of blocks in the RTIO memory pool.
+
+config LIBIIO_IIO_DEVICE_TRIGGER_IO_CHANNELS_STREAM_BLK_SIZE
+	int "The number of bytes in each block"
+	default 256
+	help
+	  The number of bytes in each block.
+
+endif # DT_HAS_IIO_TRIGGER_IO_CHANNELS_STREAM_ENABLED
