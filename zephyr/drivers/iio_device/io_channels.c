@@ -121,21 +121,51 @@ static int iio_device_io_channels_add_channels(const struct device *dev,
 	const struct iio_device_io_channels_config *config = dev->config;
 	struct iio_channel *iio_channel;
 
-	bool scan_element = false;
 	const char *name = NULL;
 	const char *label = NULL;
 	enum iio_attr_type type = IIO_ATTR_TYPE_CHANNEL;
 	const char *filename = NULL;
-	const struct iio_data_format fmt = {
-		.length = 16,
-		.bits = 16,
-		.is_signed = true,
-	};
 	char id[32];
 	int index;
 
 	for (index = 0; index < config->num_channels; index++) {
 		bool output = config->channels[index].type == IO_CHANNEL_TYPE_DAC;
+		bool scan_element = !output;
+		bool is_signed;
+		int scale_resolution;
+		struct iio_data_format fmt;
+
+		if (config->channels[index].type == IO_CHANNEL_TYPE_ADC) {
+			const struct adc_dt_spec *ch = &config->channels[index].adc;
+
+			is_signed = ch->channel_cfg_dt_node_exists
+				  ? ch->channel_cfg.differential : 0;
+			scale_resolution = ch->resolution - (is_signed ? 1 : 0);
+			fmt = (struct iio_data_format){
+				.length = (ch->resolution / 8 + (ch->resolution % 8 != 0)) * 8,
+				.bits = ch->resolution,
+				.is_signed = is_signed,
+				.with_scale = true,
+				.scale = ((double)ch->vref_mv)
+					/ (double)(1u << scale_resolution),
+				.is_be = true,
+			};
+		} else {
+			const struct dac_dt_spec *ch = &config->channels[index].dac;
+
+			fmt = (struct iio_data_format){
+				.length = (ch->channel_cfg.resolution / 8 + (ch->channel_cfg.resolution % 8 != 0)) * 8,
+				.bits = ch->channel_cfg.resolution,
+				.is_signed = false,
+				.with_scale = (ch->vref_mv != 0
+					    && ch->channel_cfg.resolution != 0),
+				.scale = (ch->channel_cfg.resolution != 0)
+					? ((double)ch->vref_mv)
+					  / (double)(1u << ch->channel_cfg.resolution)
+					: 0.0,
+				.is_be = true,
+			};
+		}
 
 		strncpy(id, config->channels[index].name, sizeof(id));
 
