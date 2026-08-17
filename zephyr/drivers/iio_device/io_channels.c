@@ -41,6 +41,7 @@ struct iio_device_io_channels_channel {
 struct iio_device_io_channels_config {
 	const struct iio_device_io_channels_channel *channels;
 	size_t num_channels;
+	const char *buffer_name;
 };
 
 struct iio_device_io_channels_channel_adc_overrides {
@@ -696,7 +697,9 @@ static int iio_device_io_channels_read_attr(const struct device *dev,
 			return iio_device_io_channels_int_ref_voltage_read(dev, dst, len);
 		}
 		break;
-
+	case IIO_ATTR_TYPE_BUFFER:
+		dst[0] = '\0';
+		return 1;
 	default:
 		break;
 	}
@@ -780,10 +783,18 @@ static int iio_device_io_channels_init(const struct device *dev)
 	return ret;
 }
 
+static const char *iio_device_io_channels_get_buffer_name(const struct device *dev)
+{
+	const struct iio_device_io_channels_config *config = dev->config;
+
+	return config->buffer_name;
+}
+
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
 	.read_attr = iio_device_io_channels_read_attr,
 	.write_attr = iio_device_io_channels_write_attr,
+	.get_buffer_name = iio_device_io_channels_get_buffer_name,
 };
 
 #define DT_DRV_COMPAT iio_io_channels
@@ -807,6 +818,7 @@ static const struct iio_device_io_channels_channel iio_device_io_channels_##inst
 static const struct iio_device_io_channels_config iio_device_io_channel_config_##inst = {	\
 	.channels = iio_device_io_channels_##inst,						\
 	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),				\
+	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "NULL"),				\
 };												\
 												\
 IIO_DEVICE_DT_INST_DEFINE(inst,									\

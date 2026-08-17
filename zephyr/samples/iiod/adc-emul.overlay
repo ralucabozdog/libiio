@@ -12,6 +12,7 @@
 				io-channels = <&adc_emul 0>, <&adc_emul 1>;
 				io-channel-names = "voltage0", "voltage1";
 				io-name = "adc-emul";
+				buffer-name = "buffer0";
 			};
 		};
 	};
