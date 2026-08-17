@@ -65,6 +65,8 @@ typedef int (*iio_device_write_attr_t)(const struct device *dev,
 
 typedef const char *(*iio_device_get_buffer_name_t)(const struct device *dev);
 
+typedef int (*iio_device_add_trigger_t)(struct iio_context *ctx, struct iio_device *iio_device);
+
 __subsystem struct iio_attr_driver_api {
 	iio_device_read_attr_t read_attr;
 	iio_device_write_attr_t write_attr;
@@ -74,6 +76,7 @@ __subsystem struct iio_device_driver_api {
 	struct iio_attr_driver_api attr_api;
 	iio_device_add_channels_t add_channels;
 	iio_device_get_buffer_name_t get_buffer_name;
+	iio_device_add_trigger_t add_trigger;
 };
 
 DEVICE_API_EXTENDS(iio_device, iio_attr, attr_api);
@@ -134,6 +137,20 @@ static inline const char *z_impl_iio_device_get_buffer_name(const struct device 
 	}
 
 	return api->get_buffer_name(dev);
+}
+
+__syscall int iio_device_add_trigger(struct iio_context *ctx, struct iio_device *iio_device);
+
+static inline int z_impl_iio_device_add_trigger(struct iio_context *ctx, struct iio_device *iio_device)
+{
+	const struct device *dev = (const struct device *) iio_device_get_pdata(iio_device);
+	const struct iio_device_driver_api *api = DEVICE_API_GET(iio_device, dev);
+
+	if (api->add_trigger == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->add_trigger(ctx, iio_device);
 }
 
 #ifdef __cplusplus

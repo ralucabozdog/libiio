@@ -11,6 +11,8 @@
 #include <zephyr/logging/log.h>
 #include <iio/iio-backend.h>
 #include <iio_device.h>
+#include <iio_trigger.h>
+#include <iio_trigger_private.h>
 
 LOG_MODULE_REGISTER(iio_device_io_channels, CONFIG_LIBIIO_LOG_LEVEL);
 
@@ -42,6 +44,7 @@ struct iio_device_io_channels_config {
 	const struct iio_device_io_channels_channel *channels;
 	size_t num_channels;
 	const char *buffer_name;
+	const struct device * const *trigger_dev;
 };
 
 struct iio_device_io_channels_channel_adc_overrides {
@@ -790,11 +793,20 @@ static const char *iio_device_io_channels_get_buffer_name(const struct device *d
 	return config->buffer_name;
 }
 
+static int iio_device_io_channels_add_trigger(struct iio_context *ctx, struct iio_device *iio_device)
+{
+	const struct device *dev = (const struct device *)iio_device_get_pdata(iio_device);
+	const struct iio_device_io_channels_config *config = dev->config;
+
+	return iio_trigger_attach(ctx, iio_device, config->trigger_dev[0]);
+}
+
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
 	.attr_api.read_attr = iio_device_io_channels_read_attr,
 	.attr_api.write_attr = iio_device_io_channels_write_attr,
 	.get_buffer_name = iio_device_io_channels_get_buffer_name,
+	.add_trigger = iio_device_io_channels_add_trigger,
 };
 
 #define DT_DRV_COMPAT iio_io_channels
@@ -806,6 +818,10 @@ static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 					.adc = ADC_DT_SPEC_GET_BY_IDX(node_id, idx) }), 		\
 					({.name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), 	\
 					.type = IO_CHANNEL_TYPE_DAC, .dac = DAC_DT_SPEC_GET_BY_IDX(node_id, idx)}))
+
+#define _IIO_IO_CH_TRIG_CHILD(node_id) \
+	COND_CODE_1(DT_NODE_HAS_PROP(node_id, trigger_id), \
+		(DEVICE_DT_GET(node_id),), ())
 
 #define IIO_DEVICE_IO_CHANNELS_INIT(inst)													\
 static struct iio_device_io_channels_channel_overrides 										\
@@ -821,10 +837,18 @@ static const struct iio_device_io_channels_channel iio_device_io_channels_##inst
 	DT_INST_FOREACH_PROP_ELEM_SEP(inst, io_channels, IIO_DEVICE_IO_CHANNEL, (,))			\
 };																							\
 																							\
+static const struct device * const _iio_io_ch_trig_##inst[] = {						\
+	COND_CODE_1(DT_INST_NODE_HAS_PROP(inst, trigger_device),							\
+		(DEVICE_DT_GET(DT_INST_PHANDLE(inst, trigger_device)),),						\
+		(DT_INST_FOREACH_CHILD(inst, _IIO_IO_CH_TRIG_CHILD)))							\
+	NULL																				\
+};																						\
+																						\
 static const struct iio_device_io_channels_config iio_device_io_channel_config_##inst = {	\
 	.channels = iio_device_io_channels_##inst,												\
 	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),								\
-	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "NULL"),							\																		\
+	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "NULL"),							\
+	.trigger_dev = _iio_io_ch_trig_##inst,													\
 };																							\
 																							\
 IIO_DEVICE_DT_INST_DEFINE(inst,																\
