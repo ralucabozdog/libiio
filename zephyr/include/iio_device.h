@@ -65,6 +65,11 @@ typedef int (*iio_device_write_attr_t)(const struct device *dev,
 
 typedef const char *(*iio_device_get_buffer_name_t)(const struct device *dev);
 
+__subsystem struct iio_attr_driver_api {
+	iio_device_read_attr_t read_attr;
+	iio_device_write_attr_t write_attr;
+};
+
 __subsystem struct iio_device_driver_api {
 	iio_device_add_channels_t add_channels;
 	iio_device_read_attr_t read_attr;
