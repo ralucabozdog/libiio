@@ -260,7 +260,7 @@ static int iio_device_io_channels_read_adc_channel_raw(const struct device *dev,
 	}
 
 	if (len < sequence.buffer_size) {
-		LOG_ERR("Buffer size %u is too small for process value, need %u",
+		LOG_ERR("Buffer size %zu is too small for process value, need %u",
 			len, sequence.buffer_size);
 		return -ENOMEM;
 	}
@@ -326,7 +326,7 @@ static int iio_device_io_channels_read_channel_scale(const struct device *dev,
 	uint32_t frac;
 
 	if (len < IIO_DEVICE_SCALE_LEN) {
-		LOG_ERR("Buffer size %u is too small for scale value, need %u",
+		LOG_ERR("Buffer size %zu is too small for scale value, need %u",
 			len, IIO_DEVICE_SCALE_LEN);
 		return -ENOMEM;
 	}
@@ -358,7 +358,7 @@ static int iio_device_io_channels_read_channel_gain(const struct device *dev,
 	struct iio_device_io_channels_data *data = dev->data;
 
 	if (len < IIO_DEVICE_GAIN_LEN) {
-		LOG_ERR("Buffer size %u is too small for gain value, need %u",
+		LOG_ERR("Buffer size %zu is too small for gain value, need %u",
 			len, IIO_DEVICE_GAIN_LEN);
 		return -ENOMEM;
 	}
@@ -504,7 +504,7 @@ static int iio_device_io_channels_int_ref_voltage_read(const struct device *dev,
 	const struct adc_dt_spec *channel = &config->channels[0].adc;
 
 	if (len < IIO_DEVICE_INT_REF_VOL_LEN) {
-		LOG_ERR("Buffer size %u is too small for internal reference voltage value, need %u",
+		LOG_ERR("Buffer size %zu is too small for internal reference voltage value, need %u",
 			len, IIO_DEVICE_INT_REF_VOL_LEN);
 		return -ENOMEM;
 	}
@@ -529,7 +529,7 @@ static int iio_device_io_channels_read_channel_process(const struct device *dev,
 	int ret;
 
 	if (len < IIO_DEVICE_PROCESS_LEN) {
-		LOG_ERR("Buffer size %u is too small for process value, need %u",
+		LOG_ERR("Buffer size %zu is too small for process value, need %u",
 			len, IIO_DEVICE_PROCESS_LEN);
 		return -ENOMEM;
 	}
@@ -566,7 +566,7 @@ static int iio_device_io_channels_read_channel_reference(const struct device *de
 	struct iio_device_io_channels_data *data = dev->data;
 
 	if (len < IIO_DEVICE_REF_LEN) {
-		LOG_ERR("Buffer size %u is too small for reference value, need %u",
+		LOG_ERR("Buffer size %zu is too small for reference value, need %u",
 			len, IIO_DEVICE_REF_LEN);
 		return -ENOMEM;
 	}
@@ -626,7 +626,7 @@ static int iio_device_io_channels_read_channel_differential(const struct device 
 	struct iio_device_io_channels_data *data = dev->data;
 
 	if (len < IIO_DEVICE_DIFFERENTIAL_LEN) {
-		LOG_ERR("Buffer size %u is too small for differential value, need %u",
+		LOG_ERR("Buffer size %zu is too small for differential value, need %u",
 			len, IIO_DEVICE_DIFFERENTIAL_LEN);
 		return -ENOMEM;
 	}
@@ -792,39 +792,45 @@ static const char *iio_device_io_channels_get_buffer_name(const struct device *d
 
 static DEVICE_API(iio_device, iio_device_io_channels_driver_api) = {
 	.add_channels = iio_device_io_channels_add_channels,
-	.read_attr = iio_device_io_channels_read_attr,
-	.write_attr = iio_device_io_channels_write_attr,
+	.attr_api.read_attr = iio_device_io_channels_read_attr,
+	.attr_api.write_attr = iio_device_io_channels_write_attr,
 	.get_buffer_name = iio_device_io_channels_get_buffer_name,
 };
 
 #define DT_DRV_COMPAT iio_io_channels
 
-#define IIO_DEVICE_IO_CHANNEL(node_id, prop, idx)					\
-        COND_CODE_1(DT_PHA_HAS_CELL_AT_IDX(node_id, prop, idx, input), \
-                    ({ .type = IO_CHANNEL_TYPE_ADC, .name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .adc = ADC_DT_SPEC_GET_BY_IDX(node_id, idx) }), ({.name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), .type = IO_CHANNEL_TYPE_DAC, .dac = DAC_DT_SPEC_GET_BY_IDX(node_id, idx)}))
+#define IIO_DEVICE_IO_CHANNEL(node_id, prop, idx)							\
+        COND_CODE_1(DT_PHA_HAS_CELL_AT_IDX(node_id, prop, idx, input), 		\
+                    ({ .type = IO_CHANNEL_TYPE_ADC, .name = 				\
+					DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), 			\
+					.adc = ADC_DT_SPEC_GET_BY_IDX(node_id, idx) }), 		\
+					({.name = DT_PHA_ELEM_NAME_BY_IDX(node_id, prop, idx), 	\
+					.type = IO_CHANNEL_TYPE_DAC, .dac = DAC_DT_SPEC_GET_BY_IDX(node_id, idx)}))
 
-#define IIO_DEVICE_IO_CHANNELS_INIT(inst)							\
-static struct iio_device_io_channels_channel_overrides iio_device_io_channel_overrides_##inst[DT_INST_PROP_LEN(inst, io_channels)];	\
-static struct iio_device_io_channels_channel_data iio_device_io_channel_channel_data_##inst[DT_INST_PROP_LEN(inst, io_channels)];	\
-static struct iio_device_io_channels_data iio_device_io_channel_data_##inst = {			\
-	.overrides = iio_device_io_channel_overrides_##inst,					\
-	.channels = iio_device_io_channel_channel_data_##inst,					\
-};												\
-												\
+#define IIO_DEVICE_IO_CHANNELS_INIT(inst)													\
+static struct iio_device_io_channels_channel_overrides 										\
+	iio_device_io_channel_overrides_##inst[DT_INST_PROP_LEN(inst, io_channels)];			\
+static struct iio_device_io_channels_channel_data 											\
+	iio_device_io_channel_channel_data_##inst[DT_INST_PROP_LEN(inst, io_channels)];			\
+static struct iio_device_io_channels_data iio_device_io_channel_data_##inst = {				\
+	.overrides = iio_device_io_channel_overrides_##inst,									\
+	.channels = iio_device_io_channel_channel_data_##inst,									\
+};																							\
+																							\
 static const struct iio_device_io_channels_channel iio_device_io_channels_##inst[] = {		\
-	DT_INST_FOREACH_PROP_ELEM_SEP(inst, io_channels, IIO_DEVICE_IO_CHANNEL, (,))		\
-};												\
-												\
+	DT_INST_FOREACH_PROP_ELEM_SEP(inst, io_channels, IIO_DEVICE_IO_CHANNEL, (,))			\
+};																							\
+																							\
 static const struct iio_device_io_channels_config iio_device_io_channel_config_##inst = {	\
-	.channels = iio_device_io_channels_##inst,						\
-	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),				\
-	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "NULL"),				\
-};												\
-												\
-IIO_DEVICE_DT_INST_DEFINE(inst,									\
-	iio_device_io_channels_init, NULL,							\
-	&iio_device_io_channel_data_##inst, &iio_device_io_channel_config_##inst,		\
-	POST_KERNEL, CONFIG_LIBIIO_IIO_DEVICE_IO_CHANNELS_INIT_PRIORITY,			\
+	.channels = iio_device_io_channels_##inst,												\
+	.num_channels = ARRAY_SIZE(iio_device_io_channels_##inst),								\
+	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "NULL"),							\																		\
+};																							\
+																							\
+IIO_DEVICE_DT_INST_DEFINE(inst,																\
+	iio_device_io_channels_init, NULL,														\
+	&iio_device_io_channel_data_##inst, &iio_device_io_channel_config_##inst,				\
+	POST_KERNEL, CONFIG_LIBIIO_IIO_DEVICE_IO_CHANNELS_INIT_PRIORITY,						\
 	&iio_device_io_channels_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(IIO_DEVICE_IO_CHANNELS_INIT)

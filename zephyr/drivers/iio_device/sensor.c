@@ -68,6 +68,7 @@ struct iio_device_sensor_config {
 	const struct device *sensor_dev;
 	const enum sensor_channel *channels;
 	size_t num_channels;
+	const char *buffer_name;
 };
 
 /* bulk fetch — one sensor_sample_fetch(SENSOR_CHAN_ALL) per round,
@@ -192,7 +193,7 @@ static int iio_device_sensor_add_channels(const struct device *dev,
 			.is_signed = map->is_signed,
 			.with_scale = true,
 			.scale     = 0.001,
-			.is_be     = false,
+			.is_be     = true,
 		};
 
 		iio_channel = iio_device_add_channel(iio_device, index, id,
@@ -329,39 +330,48 @@ static int iio_device_sensor_init(const struct device *dev)
 	return 0;
 }
 
+static const char *iio_device_sensor_get_buffer_name(const struct device *dev)
+{
+	const struct iio_device_sensor_config *config = dev->config;
+
+	return config->buffer_name;
+}
+
 static DEVICE_API(iio_device, iio_device_sensor_driver_api) = {
+	.attr_api.read_attr = iio_device_sensor_read_attr,
 	.add_channels   = iio_device_sensor_add_channels,
-	.read_attr      = iio_device_sensor_read_attr,
+	.get_buffer_name = iio_device_sensor_get_buffer_name,
 };
 
 #define DT_DRV_COMPAT iio_sensor
 
-#define IIO_DEVICE_SENSOR_INIT(inst)						\
-									\
-static const enum sensor_channel iio_device_sensor_channels_##inst[] =		\
-	DT_INST_PROP(inst, sensor_channels);					\
-										\
-static struct sensor_value							\
-	iio_device_sensor_cache_##inst[ARRAY_SIZE(				\
-		iio_device_sensor_channels_##inst)];				\
-										\
-static struct iio_device_sensor_data iio_device_sensor_data_##inst = {		\
-	.cache        = iio_device_sensor_cache_##inst,				\
-	.fetched      = false,							\
-};										\
-										\
-static const struct iio_device_sensor_config				\
-		iio_device_sensor_config_##inst = {				\
-	.sensor_dev  = DEVICE_DT_GET(DT_INST_PHANDLE(inst, sensor_device)),	\
-	.channels    = iio_device_sensor_channels_##inst,			\
-	.num_channels = ARRAY_SIZE(iio_device_sensor_channels_##inst),		\
-};										\
-										\
-IIO_DEVICE_DT_INST_DEFINE(inst,							\
-	iio_device_sensor_init, NULL,						\
-	&iio_device_sensor_data_##inst,						\
-	&iio_device_sensor_config_##inst,					\
-	POST_KERNEL, CONFIG_LIBIIO_IIO_DEVICE_SENSOR_INIT_PRIORITY,		\
+#define IIO_DEVICE_SENSOR_INIT(inst)											\
+																				\
+static const enum sensor_channel iio_device_sensor_channels_##inst[] =			\
+	DT_INST_PROP(inst, sensor_channels);										\
+																				\
+static struct sensor_value														\
+	iio_device_sensor_cache_##inst[ARRAY_SIZE(									\
+		iio_device_sensor_channels_##inst)];									\
+																				\
+static struct iio_device_sensor_data iio_device_sensor_data_##inst = {			\
+	.cache        = iio_device_sensor_cache_##inst,								\
+	.fetched      = false,														\
+};																				\
+																				\
+static const struct iio_device_sensor_config									\
+		iio_device_sensor_config_##inst = {										\
+	.sensor_dev  = DEVICE_DT_GET(DT_INST_PHANDLE(inst, sensor_device)),			\
+	.channels    = iio_device_sensor_channels_##inst,							\
+	.num_channels = ARRAY_SIZE(iio_device_sensor_channels_##inst),				\
+	.buffer_name = DT_INST_PROP_OR(inst, buffer_name, "NULL"),				\
+};																				\
+																				\
+IIO_DEVICE_DT_INST_DEFINE(inst,													\
+	iio_device_sensor_init, NULL,												\
+	&iio_device_sensor_data_##inst,												\
+	&iio_device_sensor_config_##inst,											\
+	POST_KERNEL, CONFIG_LIBIIO_IIO_DEVICE_SENSOR_INIT_PRIORITY,					\
 	&iio_device_sensor_driver_api);
 
 DT_INST_FOREACH_STATUS_OKAY(IIO_DEVICE_SENSOR_INIT)

@@ -71,11 +71,12 @@ __subsystem struct iio_attr_driver_api {
 };
 
 __subsystem struct iio_device_driver_api {
+	struct iio_attr_driver_api attr_api;
 	iio_device_add_channels_t add_channels;
-	iio_device_read_attr_t read_attr;
-	iio_device_write_attr_t write_attr;
 	iio_device_get_buffer_name_t get_buffer_name;
 };
+
+DEVICE_API_EXTENDS(iio_device, iio_attr, attr_api);
 
 __syscall int iio_device_add_channels(const struct device *dev,
 		struct iio_device *iio_device);
@@ -96,7 +97,7 @@ static inline int z_impl_iio_device_read_attr(const struct device *dev,
 		const struct iio_device *iio_device, const struct iio_attr *attr,
 		char *dst, size_t len)
 {
-	const struct iio_device_driver_api *api = DEVICE_API_GET(iio_device, dev);
+	const struct iio_attr_driver_api *api = DEVICE_API_GET(iio_attr, dev);
 
 	if (api->read_attr == NULL) {
 		return -ENOSYS;
@@ -113,7 +114,7 @@ static inline int z_impl_iio_device_write_attr(const struct device *dev,
 		const struct iio_device *iio_device, const struct iio_attr *attr,
 		const char *src, size_t len)
 {
-	const struct iio_device_driver_api *api = DEVICE_API_GET(iio_device, dev);
+	const struct iio_attr_driver_api *api = DEVICE_API_GET(iio_attr, dev);
 
 	if (api->write_attr == NULL) {
 		return -ENOSYS;
