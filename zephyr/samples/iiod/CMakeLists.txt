@@ -23,6 +23,10 @@ if(CONFIG_LIBIIO_IIOD_ADC_EMUL)
   list(APPEND EXTRA_CONF_FILE adc-emul.conf)
 endif()
 
+if(CONFIG_LIBIIO_IIOD_ADC_MAX32)
+  list(APPEND EXTRA_DTC_OVERLAY_FILE adc-max32.overlay)
+endif()
+
 if(CONFIG_LIBIIO_IIOD_SENSOR_EMUL)
   list(APPEND EXTRA_DTC_OVERLAY_FILE sensor-emul.overlay)
   list(APPEND EXTRA_CONF_FILE sensor-emul.conf)

@@ -8,6 +8,12 @@ config LIBIIO_IIOD_ADC_EMUL
 	help
 	  Enable ADC emulator IIO device driver.
 
+config LIBIIO_IIOD_ADC_MAX32
+	bool "Enable APARD32690 on-board ADC"
+	help
+	  Use the real MAX32690 on-board ADC (APARD32690 board) instead of the
+	  emulated ADC.
+
 config LIBIIO_IIOD_SENSOR_EMUL
 	bool "Enable sensor emulator"
 	help
