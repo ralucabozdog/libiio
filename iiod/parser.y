@@ -22,11 +22,15 @@ void yyerror(yyscan_t scanner, const char *msg);
 typedef void *yyscan_t;
 #endif
 
-#include "../iio-config.h"
+#include "iio-config.h"
 #include "debug.h"
 
 #include <stdbool.h>
+/* <sys/socket.h> is not used by the generated parser and pulls in the POSIX
+ * socket layer, which is undesirable on Zephyr. */
+#if !defined(__ZEPHYR__)
 #include <sys/socket.h>
+#endif
 
 union YYSTYPE;
 
