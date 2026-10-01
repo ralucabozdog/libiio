@@ -120,6 +120,14 @@ struct parser_pdata {
 
 	ssize_t (*writefd)(struct parser_pdata *pdata, const void *buf, size_t len);
 	ssize_t (*readfd)(struct parser_pdata *pdata, void *buf, size_t len);
+
+	/* Per-connection state for the v0.x (ASCII) streaming path, owned by
+	 * ascii-ops.c. The upstream (POSIX) server keeps its equivalent state in
+	 * the device userdata via iio_device_get_data(); on Zephyr that slot is
+	 * already used by the backend to store the device's trigger, so the state
+	 * is anchored here on the connection instead. NULL until the first
+	 * successful OPEN. */
+	void *ascii_pdata;
 };
 
 struct iio_device_pdata {

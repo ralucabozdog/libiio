@@ -412,6 +412,17 @@ static int iio_usb_request_handler(struct usbd_class_data *const c_data, struct 
 			 * rather than matching on it.
 			 */
 			iio_usb_pipe_fail_rx(pipe, err);
+
+			/*
+			 * Do not re-arm here. A bus-level error such as a suspend
+			 * fails every armed OUT at once; re-arming each against a
+			 * controller that cannot accept one storms the endpoint
+			 * until it wedges. Return the credit so the next
+			 * OPEN_PIPE/enable arms a replacement.
+			 */
+			net_buf_unref(buf);
+			k_sem_give(&pipe->rx_credit);
+			return 0;
 		}
 
 		/*
@@ -585,6 +596,29 @@ static ssize_t iiod_usb_pipe_write(struct iiod_pdata *pdata, const void *buf, si
 	while (bytes_sent < size) {
 		size_t chunk_size = MIN(size - bytes_sent, data->tx_buf_size);
 
+		/*
+		 * Do not commit anything for a session that has ended. A v0 client
+		 * can abandon a READBUF reply: it sends CLOSE_PIPE/RESET_PIPES while
+		 * the interpreter still has the command buffered, then walks away.
+		 * The interpreter finishes parsing and reaches this write with the
+		 * pipe already closed. Bailing here keeps the count line out of the
+		 * controller's IN FIFO, so the next session opens on a clean endpoint
+		 * with no stale bytes to deliver as its reply header - which is what
+		 * desynchronised the host (READBUF "READ INTEGER: -22"). It also
+		 * avoids flushing the FIFO on the device, which would reset the IN
+		 * data toggle underneath a host that keeps its own across the
+		 * persistent endpoint and wedge the transfer.
+		 *
+		 * The epoch check additionally stops a write for a session a later
+		 * OPEN_PIPE has already superseded. Both open and rx_epoch are read
+		 * from this pipe's own interpreter thread, as in iiod_usb_pipe_read().
+		 */
+		if (!pipe->open || (uint32_t)atomic_get(&pipe->epoch) != pipe->rx_epoch) {
+			LOG_DBG("Pipe %u: session %u ended during write",
+				pipe->idx, pipe->rx_epoch);
+			return bytes_sent > 0 ? (ssize_t)bytes_sent : -ESHUTDOWN;
+		}
+
 		net_buf = iio_usb_buf_alloc(data->tx_pool,
 					    iio_usb_get_bulk_in(c_data, pipe->idx));
 
@@ -622,6 +656,18 @@ static ssize_t iiod_usb_pipe_write(struct iiod_pdata *pdata, const void *buf, si
 		}
 
 		bytes_sent += chunk_size;
+
+		/*
+		 * The transfer may have completed only because the next session's
+		 * host read drained this chunk from the controller. In that case
+		 * the session moved on while this write was parked, so stop here
+		 * rather than enqueue the following chunk into its stream.
+		 */
+		if ((uint32_t)atomic_get(&pipe->epoch) != pipe->rx_epoch) {
+			LOG_DBG("Pipe %u: session %u superseded after transmit",
+				pipe->idx, pipe->rx_epoch);
+			return (ssize_t)bytes_sent;
+		}
 	}
 
 	return bytes_sent;

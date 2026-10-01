@@ -20,6 +20,9 @@
 
 int yyparse(yyscan_t scanner);
 
+/* Free all per-connection ASCII streaming state (see struct ascii_pdata). */
+static void ascii_pdata_free(struct parser_pdata *pdata);
+
 /* Identical to print_value() in ops.c. */
 static void print_value(struct parser_pdata *pdata, long value)
 {
@@ -50,6 +53,23 @@ static inline uint32_t iiod_be32toh(uint32_t word)
 #define READ_ATTR_BUF_SIZE 1024
 
 typedef struct iio_attr *(*rw_attr_cb_t)(const void *, unsigned int);
+
+/* Identical to get_mask() in ops.c. Parses the v0 channel mask, a big-endian
+ * sequence of 8-hex-digit words, into the little-endian words[] array. Defined
+ * here because ops.c (where the original is static) is not part of the Zephyr
+ * build. */
+static void get_mask(const char *mask, size_t len, uint32_t *words)
+{
+	size_t nb = (len + 7) / 8;
+	uint32_t *ptr = words + nb;
+	char buf[9];
+
+	while (*mask) {
+		snprintf(buf, sizeof(buf), "%.*s", 8, mask);
+		sscanf(buf, "%08x", --ptr);
+		mask += 8;
+	}
+}
 
 /* Identical to buffer_analyze() in ops.c. */
 static int buffer_analyze(unsigned int nb, const char *src, size_t len)
@@ -467,50 +487,412 @@ int set_timeout(struct parser_pdata *pdata, int timeout)
 	return ret;
 }
 
-/* Stub - to be implemented. */
+/*
+ * Per-connection streaming state for the ASCII (v0.x) protocol.
+ *
+ * The upstream POSIX server (ops.c) keeps its equivalent state on the device
+ * via iio_device_get_data(), spins up a dedicated rw_thd() per device, and lets
+ * several clients share one buffer. None of that fits Zephyr: the backend
+ * already uses the device userdata slot to store the trigger, and there is one
+ * ASCII connection at a time driving a synchronous backend. So the state is
+ * anchored on the connection (pdata->ascii_pdata) and the transfer is driven
+ * inline on the connection thread using the iio_stream helper (stream.c), which
+ * is exactly the single-threaded block enqueue/dequeue loop the Zephyr backend
+ * expects.
+ */
+struct ascii_dev_stream {
+	struct iio_device *dev;
+	struct iio_stream *stream;
+	struct iio_channels_mask *mask;
+	size_t sample_size;
+	bool cyclic;
+	/* Re-send the channel mask on the next READBUF, mirroring the
+	 * "new_client" flag in ops.c's send_data(): the v0 client expects the
+	 * mask line once per READBUF/WRITEBUF command. */
+	bool send_mask;
+};
+
+/* Default number of blocks, matching the POSIX server (iiod.c). Overridable
+ * per device by the "SET <dev> BUFFERS_COUNT <n>" command before OPEN. */
+#define ASCII_DEFAULT_NB_BLOCKS 4
+
+struct ascii_pdata {
+	struct ascii_dev_stream dev_stream;
+	unsigned int nb_blocks;
+};
+
+static struct ascii_pdata *ascii_pdata_get(struct parser_pdata *pdata)
+{
+	struct ascii_pdata *ap = pdata->ascii_pdata;
+
+	if (!ap) {
+		ap = zalloc(sizeof(*ap));
+		if (!ap)
+			return NULL;
+
+		ap->nb_blocks = ASCII_DEFAULT_NB_BLOCKS;
+		pdata->ascii_pdata = ap;
+	}
+
+	return ap;
+}
+
+/* Tear down a device stream, if any is open. Safe to call when idle. */
+static void ascii_dev_stream_close(struct ascii_dev_stream *ds)
+{
+	if (ds->stream) {
+		iio_stream_destroy(ds->stream);
+		ds->stream = NULL;
+	}
+	if (ds->mask) {
+		iio_channels_mask_destroy(ds->mask);
+		ds->mask = NULL;
+	}
+	ds->dev = NULL;
+	ds->sample_size = 0;
+	ds->cyclic = false;
+	ds->send_mask = false;
+}
+
+/* Free all ASCII streaming state on the connection. Called at teardown. */
+static void ascii_pdata_free(struct parser_pdata *pdata)
+{
+	struct ascii_pdata *ap = pdata->ascii_pdata;
+
+	if (!ap)
+		return;
+
+		
+	ascii_dev_stream_close(&ap->dev_stream);
+	free(ap);
+	pdata->ascii_pdata = NULL;
+}
+
+/* Send the current channel mask as an ASCII hex line, e.g. "00000003\n".
+ * Identical framing to the "new_client" branch of send_data() in ops.c. */
+static ssize_t send_mask(struct parser_pdata *pdata, struct iio_device *dev,
+		const struct iio_channels_mask *mask)
+{
+	unsigned int i, nb_channels = iio_device_get_channels_count(dev);
+	unsigned int nb_words = (nb_channels + 31) / 32;
+	const struct iio_channel *chn;
+	uint32_t *words;
+	char buf[129], *ptr = buf;
+	ssize_t length;
+
+	words = calloc(nb_words, 4);
+	if (!words)
+		return -ENOMEM;
+
+	for (i = 0; i < nb_channels; i++) {
+		chn = iio_device_get_channel(dev, i);
+
+		if (iio_channel_is_enabled(chn, mask))
+			words[IIO_BIT_WORD(i)] |= IIO_BIT_MASK(i);
+	}
+
+	length = sizeof(buf);
+	for (i = nb_words; i > 0 && ptr < buf + sizeof(buf); i--, ptr += 8) {
+		snprintf(ptr, length, "%08x", words[i - 1]);
+		length -= 8;
+	}
+
+	*ptr = '\n';
+	length--;
+
+	free(words);
+
+	if (length < 0) {
+		IIO_ERROR("send_mask: string length error\n");
+		return -ENOSPC;
+	}
+
+	return write_all(pdata, buf, ptr + 1 - buf);
+}
+
+/* Functionally equivalent to set_buffers_count() in ops.c, but records the
+ * count on the connection instead of the device userdata. Takes effect on the
+ * next OPEN. */
 int set_buffers_count(struct parser_pdata *pdata, struct iio_device *dev, long value)
 {
-	(void)dev;
-	(void)value;
+	unsigned int nb = (unsigned int)value;
+	struct ascii_pdata *ap;
+	int ret = 0;
 
-	print_value(pdata, -ENOSYS);
-	return -ENOSYS;
+	if (value < 1) {
+		ret = -EINVAL;
+		goto err_print_value;
+	}
+
+	if (!dev) {
+		ret = -ENODEV;
+		goto err_print_value;
+	}
+
+	ap = ascii_pdata_get(pdata);
+	if (!ap) {
+		ret = -ENOMEM;
+		goto err_print_value;
+	}
+
+	ap->nb_blocks = nb;
+
+err_print_value:
+	print_value(pdata, ret);
+	return ret;
 }
 
-/* Stub - to be implemented. */
+/*
+ * Functionally equivalent to open_dev()/open_dev_helper() in ops.c, but driven
+ * synchronously via the iio_stream helper rather than a dedicated rw thread.
+ * The channel mask is parsed from the v0 hex string, a stream of nb_blocks
+ * blocks is created, and the state is stashed on the connection for the
+ * following READBUF/WRITEBUF/CLOSE commands.
+ */
 int open_dev(struct parser_pdata *pdata, struct iio_device *dev, size_t samples_count,
-		const char *mask, bool cyclic)
+		const char *mask_str, bool cyclic)
 {
-	(void)dev;
-	(void)samples_count;
-	(void)mask;
-	(void)cyclic;
+	size_t nb_channels, nb_words, len;
+	struct ascii_dev_stream *ds;
+	struct iio_channels_mask *mask;
+	struct iio_stream *stream;
+	struct iio_buffer *buffer;
+	struct ascii_pdata *ap;
+	const struct iio_channel *chn;
+	uint32_t *words = NULL;
+	ssize_t sample_size;
+	unsigned int i;
+	int ret;
 
-	print_value(pdata, -ENOSYS);
-	return -ENOSYS;
+	if (!dev) {
+		ret = -ENODEV;
+		goto err_print_value;
+	}
+
+	ap = ascii_pdata_get(pdata);
+	if (!ap) {
+		ret = -ENOMEM;
+		goto err_print_value;
+	}
+
+	ds = &ap->dev_stream;
+
+	/* Only one open device per connection is supported. */
+	if (ds->stream) {
+		ret = -EBUSY;
+		goto err_print_value;
+	}
+
+	nb_channels = iio_device_get_channels_count(dev);
+	nb_words = (nb_channels + 31) / 32;
+	len = strlen(mask_str);
+	if (len != nb_words * 8) {
+		ret = -EINVAL;
+		goto err_print_value;
+	}
+
+	if (!samples_count) {
+		ret = -EINVAL;
+		goto err_print_value;
+	}
+
+	words = malloc(sizeof(*words) * nb_words);
+	if (!words) {
+		ret = -ENOMEM;
+		goto err_print_value;
+	}
+
+	get_mask(mask_str, len, words);
+
+	mask = iio_create_channels_mask(nb_channels);
+	if (!mask) {
+		ret = -ENOMEM;
+		goto err_free_words;
+	}
+
+	for (i = 0; i < nb_channels; i++) {
+		chn = iio_device_get_channel(dev, i);
+
+		if (IIO_TEST_BIT(words, i))
+			iio_channel_enable(chn, mask);
+		else
+			iio_channel_disable(chn, mask);
+	}
+
+	buffer = iio_device_get_buffer(dev, 0);
+	if (!buffer) {
+		ret = -ENODEV;
+		goto err_free_mask;
+	}
+
+	sample_size = iio_device_get_sample_size(dev, mask);
+	if (sample_size <= 0) {
+		ret = sample_size < 0 ? (int)sample_size : -EINVAL;
+		goto err_free_mask;
+	}
+
+	/* iio_buffer_create_stream() (via iio_buffer_open) copies the mask, so
+	 * our copy is retained only to answer the READBUF mask query. */
+	stream = iio_buffer_create_stream(buffer, ap->nb_blocks, samples_count, mask);
+	ret = iio_err(stream);
+	if (ret)
+		goto err_free_mask;
+
+	ds->dev = dev;
+	ds->stream = stream;
+	ds->mask = mask;
+	ds->sample_size = (size_t)sample_size;
+	ds->cyclic = cyclic;
+	ds->send_mask = true;
+
+	free(words);
+
+	print_value(pdata, 0);
+	return 0;
+
+err_free_mask:
+	iio_channels_mask_destroy(mask);
+err_free_words:
+	free(words);
+err_print_value:
+	print_value(pdata, ret);
+	return ret;
 }
 
-/* Stub - to be implemented. */
+/* Functionally equivalent to close_dev()/close_dev_helper() in ops.c. */
 int close_dev(struct parser_pdata *pdata, struct iio_device *dev)
 {
-	(void)pdata;
-	(void)dev;
+	struct ascii_pdata *ap = pdata->ascii_pdata;
+	struct ascii_dev_stream *ds;
+	int ret;
 
-	/* No device can be open yet (open_dev fails), so this is only reached
-	 * via the explicit CLOSE command. Reply quietly with success to keep the
-	 * client's state machine happy. TODO: check flow reaching this point*/
-	return 0;
+	if (!dev) {
+		ret = -ENODEV;
+		goto err_print_value;
+	}
+
+	if (!ap || !ap->dev_stream.stream || ap->dev_stream.dev != dev) {
+		ret = -EBADF;
+		goto err_print_value;
+	}
+
+	ds = &ap->dev_stream;
+	ascii_dev_stream_close(ds);
+	ret = 0;
+
+err_print_value:
+	print_value(pdata, ret);
+	return ret;
 }
 
-/* Stub - to be implemented. */
+/*
+ * Functionally equivalent to rw_dev()/rw_buffer() in ops.c for the Zephyr
+ * synchronous backend. For a read (READBUF): grab the next filled block, tell
+ * the client how many bytes follow, (re)send the channel mask, then stream the
+ * raw sample data. For a write (WRITEBUF): TX buffers are not yet wired up in
+ * the Zephyr backend, so report -ENOSYS - matching the commented-out .writebuf
+ * op in zephyr/backend.c.
+ *
+ * On the wire, READBUF replies with:
+ *     <byte_count>\n <mask>\n <raw_sample_bytes>
+ * exactly as the POSIX server's send_data() does.
+ */
 ssize_t rw_dev(struct parser_pdata *pdata, struct iio_device *dev, unsigned int nb, bool is_write)
 {
-	(void)dev;
-	(void)nb;
-	(void)is_write;
+	struct ascii_pdata *ap = pdata->ascii_pdata;
+	struct ascii_dev_stream *ds;
+	const struct iio_block *block;
+	size_t remaining, block_len, chunk;
+	ssize_t total = 0;
+	void *start;
+	ssize_t ret;
 
-	print_value(pdata, -ENOSYS);
-	return -ENOSYS;
+	if (!dev) {
+		ret = -ENODEV;
+		goto err_print_value;
+	}
+
+	if (!ap || !ap->dev_stream.stream || ap->dev_stream.dev != dev) {
+		ret = -EBADF;
+		goto err_print_value;
+	}
+
+	ds = &ap->dev_stream;
+
+	/* Writing samples is not supported by the Zephyr backend yet, matching
+	 * the commented-out .writebuf op in zephyr/backend.c. */
+	if (is_write) {
+		ret = -ENOSYS;
+		goto err_print_value;
+	}
+
+	/* Only whole samples are transferred, like send_data() in ops.c. */
+	remaining = nb - (nb % ds->sample_size);
+	if (!remaining) {
+		/* Too small to hold a single sample: nothing to transfer. */
+		print_value(pdata, 0);
+		return 0;
+	}
+
+	/* Re-send the channel mask on the first chunk of this READBUF. The
+	 * POSIX server does the same by setting new_client=true on every
+	 * rw_buffer() (ops.c); the v0 client reads the mask once per READBUF. */
+	ds->send_mask = true;
+
+	/*
+	 * A single READBUF may span several blocks: the client sent one
+	 * "READBUF <dev> <nb>" and then reads length-prefixed chunks until it
+	 * has collected nb bytes (see iiod_client_read_unlocked()). Feed it one
+	 * block per iteration until the request is satisfied.
+	 */
+	while (remaining >= ds->sample_size) {
+		block = iio_stream_get_next_block(ds->stream);
+		ret = iio_err(block);
+		if (ret) {
+			/* If nothing has been sent yet, the error code can still
+			 * be delivered in-band as the chunk length. Otherwise the
+			 * client is mid-transfer, so stop with a 0 terminator
+			 * below. */
+			if (total == 0)
+				goto err_print_value;
+			break;
+		}
+
+		start = iio_block_start(block);
+		block_len = (char *)iio_block_end(block) - (char *)start;
+
+		chunk = remaining < block_len ? remaining : block_len;
+		chunk -= chunk % ds->sample_size;
+
+		/* Byte count that follows. */
+		print_value(pdata, (long)chunk);
+
+		if (ds->send_mask) {
+			ret = send_mask(pdata, dev, ds->mask);
+			if (ret < 0)
+				return ret;
+
+			ds->send_mask = false;
+		}
+
+		ret = write_all(pdata, start, chunk);
+		if (ret < 0)
+			return ret;
+
+		total += (ssize_t)chunk;
+		remaining -= chunk;
+	}
+
+	/* If fewer than the requested nb bytes were delivered, tell the client
+	 * to stop reading chunks (ops.c does the same with print_value(0)). */
+	if (total > 0 && (size_t)total < (size_t)nb)
+		print_value(pdata, 0);
+
+	return total;
+
+err_print_value:
+	print_value(pdata, ret);
+	return ret;
 }
 
 /*
@@ -530,7 +912,14 @@ void invalidate_sample_size_cache(const struct iio_device *dev)
  * path. ops.c also has a socket branch (recv() with MSG_PEEK/MSG_TRUNC) and a
  * USB bulk branch, both of which can read past the newline; that would corrupt
  * the ASCII->binary handoff on the Zephyr transports. Here we read one byte at
- * a time until the newline, so nothing past the line is ever consumed. */
+ * a time until the newline, so nothing past the line is ever consumed.
+ *
+ * On a transport error (e.g. -ESHUTDOWN when the client closes the pipe) the
+ * connection is dead, so mark it stopped. That terminates the ascii_interpreter
+ * loop and lets the per-connection interpreter thread exit instead of spinning
+ * on a closed transport - which, on the USB backend, would otherwise leave a
+ * stale thread racing the next connection's thread for the same pipe. The
+ * upstream read_line() sets pdata->stop for the same reason on disconnect. */
 ssize_t read_line(struct parser_pdata *pdata, char *buf, size_t len)
 {
 	size_t bytes_read = 0;
@@ -538,8 +927,10 @@ ssize_t read_line(struct parser_pdata *pdata, char *buf, size_t len)
 
 	while (len) {
 		ssize_t ret = pdata->readfd(pdata, buf, 1);
-		if (ret < 0)
+		if (ret < 0) {
+			pdata->stop = true;
 			return ret;
+		}
 
 		bytes_read++;
 
@@ -565,8 +956,10 @@ void enable_binary(struct parser_pdata *pdata)
 
 /* Differs from ascii_interpreter() in ops.c: the yylex/yyparse loop is the
  * same, but the trailing per-device cleanup loop (close_dev_helper() over every
- * device) is omitted. That loop tears down the POSIX RW threads, which do not
- * exist here; no device can be open yet, so there is nothing to tear down. */
+ * device) is replaced by a single ascii_pdata_free(). The POSIX server keeps
+ * per-device RW threads that must each be torn down; here all streaming state
+ * lives on the connection (pdata->ascii_pdata), so one free tears down whatever
+ * stream is still open when the client disconnects without a CLOSE. */
 void ascii_interpreter(struct parser_pdata *pdata)
 {
 	yyscan_t scanner;
@@ -579,4 +972,6 @@ void ascii_interpreter(struct parser_pdata *pdata)
 	} while (!pdata->stop && !pdata->binary && ret >= 0);
 
 	yylex_destroy(scanner);
+
+	ascii_pdata_free(pdata);
 }
