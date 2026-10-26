@@ -41,7 +41,9 @@ if LIBIIO_MULTITHREADING
 
 config LIBIIO_THREAD_POOL_SIZE
 	int "Maximum number of libiio internal threads"
-	default 6 if LIBIIO_IIOD_NETWORK
+	default 8 if LIBIIO_IIOD_NETWORK && LIBIIO_IIOD_NETWORK_CLIENT_MAX > 4
+	default 6 if LIBIIO_IIOD_NETWORK && LIBIIO_IIOD_NETWORK_CLIENT_MAX > 2
+	default 4 if LIBIIO_IIOD_NETWORK
 	default 3
 	help
 	  Slots in the static libiio thread pool. Each costs
@@ -50,6 +52,9 @@ config LIBIIO_THREAD_POOL_SIZE
 	  Demand is 1 per concurrent interpreter - the responder's writer task,
 	  since its read loop runs on the transport's own thread - plus 2 per
 	  iiod buffer, plus 1 per buffer stream and per event stream.
+
+	  With the network server, the default covers
+	  LIBIIO_IIOD_NETWORK_CLIENT_MAX interpreters plus one iiod buffer.
 
 config LIBIIO_THREAD_STACK_SIZE
 	int "Stack size for libiio internal threads"
@@ -65,7 +70,7 @@ config LIBIIO_THREAD_PRIORITY
 
 config LIBIIO_MUTEX_POOL_SIZE
 	int "Maximum number of libiio mutexes"
-	default 48 if LIBIIO_IIOD_NETWORK
+	default 48 if LIBIIO_IIOD_NETWORK && LIBIIO_IIOD_NETWORK_CLIENT_MAX > 2
 	default 24
 	help
 	  Slots in the static iio_mutex pool. Three are held permanently by
@@ -77,7 +82,7 @@ config LIBIIO_MUTEX_POOL_SIZE
 
 config LIBIIO_COND_POOL_SIZE
 	int "Maximum number of libiio condition variables"
-	default 32 if LIBIIO_IIOD_NETWORK
+	default 32 if LIBIIO_IIOD_NETWORK && LIBIIO_IIOD_NETWORK_CLIENT_MAX > 2
 	default 16
 	help
 	  Slots in the static iio_cond pool. Condition variables pair with

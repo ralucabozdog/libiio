@@ -41,9 +41,12 @@ config LIBIIO_IIOD_NETWORK_CLIENT_THREAD_STACK_SIZE
 
 config LIBIIO_IIOD_NETWORK_CLIENT_MAX
 	int "Maximum number of clients"
-	default 6
+	default 2
+	range 1 64
 	help
-	  Maximum number of network clients.
+	  Maximum number of network clients. Each one reserves a
+	  LIBIIO_IIOD_NETWORK_CLIENT_THREAD_STACK_SIZE stack and a net context
+	  whether or not it is connected.
 
 endif # LIBIIO_IIOD_NETWORK
 

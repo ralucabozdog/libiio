@@ -21,7 +21,20 @@
 
 LOG_MODULE_REGISTER(iiod_network, CONFIG_LIBIIO_LOG_LEVEL);
 
-#define MAX_CONNECTIONS	5
+/* Each client's responder takes one pool thread for its writer task. */
+BUILD_ASSERT(!IS_ENABLED(CONFIG_LIBIIO_MULTITHREADING) ||
+	     CONFIG_LIBIIO_THREAD_POOL_SIZE >= CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX,
+	     "CONFIG_LIBIIO_THREAD_POOL_SIZE must be at least "
+	     "CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX");
+
+/* One net context for the listening socket and one per client, on top of
+ * whatever else (e.g. the mDNS responder) the application uses.
+ */
+#if defined(CONFIG_NET_MAX_CONTEXTS) && !defined(CONFIG_NET_SOCKETS_OFFLOAD)
+BUILD_ASSERT(CONFIG_NET_MAX_CONTEXTS >= CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX + 1,
+	     "CONFIG_NET_MAX_CONTEXTS is too small for "
+	     "CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX clients");
+#endif
 
 #if defined(CONFIG_NET_CONNECTION_MANAGER)
 static K_SEM_DEFINE(network_ready, 0, 1);
@@ -50,10 +63,14 @@ struct client_data {
 static struct client_data client_pool[CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX];
 static K_MUTEX_DEFINE(client_pool_mutex);
 
-/* Shared IIO context and XML - used by all clients */
+/* Shared IIO context and XML - used by all clients. Created by the first
+ * client thread rather than the server thread, so the server thread only
+ * needs a stack big enough for its accept loop.
+ */
 static struct iio_context *shared_ctx = NULL;
 static const void *shared_xml = NULL;
 static size_t shared_xml_len = 0;
+static K_MUTEX_DEFINE(shared_ctx_mutex);
 
 /* Thread stacks for client threads */
 K_THREAD_STACK_ARRAY_DEFINE(client_thread_stacks,
@@ -175,15 +192,55 @@ static int iiod_network_create_server(void)
 	}
 	LOG_DBG("Socket bound successfully to port %d", CONFIG_LIBIIO_IIOD_NETWORK_PORT);
 
-	ret = listen(server_fd, MAX_CONNECTIONS);
+	ret = listen(server_fd, CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX);
 	if (ret < 0) {
 		LOG_ERR("Failed to listen on socket: %d (errno: %d)", ret, errno);
 		close(server_fd);
 		return -EPERM;
 	}
-	LOG_DBG("Socket listening successfully: backlog = %d", MAX_CONNECTIONS);
+	LOG_DBG("Socket listening successfully: backlog = %d",
+		CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX);
 
 	return server_fd;
+}
+
+static int iiod_network_get_shared_ctx(void)
+{
+	struct iio_context_params ctx_params = {0};
+	struct iio_context *ctx;
+	char *xml;
+	int ret = 0;
+
+	k_mutex_lock(&shared_ctx_mutex, K_FOREVER);
+	if (shared_ctx) {
+		goto out_unlock;
+	}
+
+	LOG_DBG("Creating shared IIO context...");
+	ctx = iio_create_context(&ctx_params, "zephyr:");
+	ret = iio_err(ctx);
+	if (ret) {
+		LOG_ERR("Context creation failed: %d", ret);
+		goto out_unlock;
+	}
+
+	LOG_DBG("Getting xml data");
+	xml = iio_context_get_xml(ctx);
+	if (!xml) {
+		LOG_ERR("Error getting context XML");
+		iio_context_destroy(ctx);
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
+
+	shared_xml = xml;
+	shared_xml_len = strlen(xml) + 1;
+	shared_ctx = ctx;
+	LOG_DBG("XML ready, length: %zu bytes", shared_xml_len);
+
+out_unlock:
+	k_mutex_unlock(&shared_ctx_mutex);
+	return ret;
 }
 
 static void iiod_network_client_thread(void *p1, void *p2, void *p3)
@@ -201,9 +258,11 @@ static void iiod_network_client_thread(void *p1, void *p2, void *p3)
 	LOG_DBG("[Client %d] Thread started (fd=%d)", this_client_num, this_fd);
 
 	/* Use iiod_interpreter - locks are already created at startup */
-	iiod_interpreter(shared_ctx, (struct iiod_pdata *)client,
-			iiod_network_read, iiod_network_write,
-			shared_xml, shared_xml_len);
+	if (!iiod_network_get_shared_ctx()) {
+		iiod_interpreter(shared_ctx, (struct iiod_pdata *)client,
+				iiod_network_read, iiod_network_write,
+				shared_xml, shared_xml_len);
+	}
 
 	if (client->fd >= 0) {
 		client->fd = -EPERM;
@@ -276,7 +335,6 @@ static void iiod_network_server_thread(void *p1, void *p2, void *p3)
 	struct sockaddr_in client_addr;
 	socklen_t client_addr_len;
 	char addr_str[32];
-	struct iio_context_params ctx_params = {0};
 	struct client_data *client;
 	static int counter;
 	int nodelay = 1;
@@ -311,30 +369,6 @@ static void iiod_network_server_thread(void *p1, void *p2, void *p3)
 		LOG_ERR("Failed to initialize tinyiiod resources");
 		return;
 	}
-
-	/* Create the shared IIO context */
-	LOG_DBG("Creating shared IIO context...");
-	shared_ctx = iio_create_context(&ctx_params, "zephyr:");
-	if (iio_err(shared_ctx)) {
-		LOG_ERR("Context creation failed");
-		close(server_fd);
-		iiod_cleanup();
-		return;
-	}
-
-	/* Get XML */
-	LOG_DBG("Getting xml data");
-	shared_xml = iio_context_get_xml(shared_ctx);
-	if (!shared_xml) {
-		LOG_ERR("Error getting context XML");
-		iio_context_destroy(shared_ctx);
-		close(server_fd);
-		iiod_cleanup();
-		return;
-	}
-
-	shared_xml_len = strlen(shared_xml) + 1;
-	LOG_DBG("XML ready, length: %zu bytes", shared_xml_len);
 
 	/* Initialize client pool */
 	for (i = 0; i < CONFIG_LIBIIO_IIOD_NETWORK_CLIENT_MAX; i++) {
@@ -389,7 +423,9 @@ static void iiod_network_server_thread(void *p1, void *p2, void *p3)
 	}
 
 	/* Cleanup resources if server loop exits */
-	iio_context_destroy(shared_ctx);
+	if (shared_ctx) {
+		iio_context_destroy(shared_ctx);
+	}
 	close(server_fd);
 	iiod_cleanup();
 
