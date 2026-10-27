@@ -223,7 +223,11 @@ static int query_callback(int sock, const struct sockaddr *from, size_t addrlen,
 		goto quit;
 	}
 
-	if (entry != MDNS_ENTRYTYPE_ANSWER)
+	/* RFC 6763 12.1: the SRV record that goes with a PTR answer belongs in
+		* the Additional section (Zephyr, Bonjour); Avahi puts it in the
+		* Answer section instead, so accept both.
+		*/
+	if (entry != MDNS_ENTRYTYPE_ANSWER && entry != MDNS_ENTRYTYPE_ADDITIONAL)
 		goto quit;
 
 	entrystr = mdns_string_extract(data, size, &name_offset, entrybuffer, sizeof(entrybuffer));

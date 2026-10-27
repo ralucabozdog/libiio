@@ -149,7 +149,12 @@ static int dnssd_add_scan_result(const struct iio_context_params *params, struct
 
 	iio_context_destroy(ctx);
 
-	return iio_scan_add_result(scan_ctx, description, hostname);
+	if (port == IIOD_PORT)
+		iio_snprintf(uri, sizeof(uri), "ip:%s", hostname);
+	else
+		iio_snprintf(uri, sizeof(uri), "ip:%s:%hu", hostname, port);
+
+	return iio_scan_add_result(scan_ctx, description, uri);
 }
 
 /*
