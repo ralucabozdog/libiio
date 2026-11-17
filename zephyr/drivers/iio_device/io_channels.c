@@ -313,11 +313,12 @@ static int iio_device_io_channels_read_channel_scale(const struct device *dev,
 		resolution = channel->channel_cfg.resolution;
 	}
 
-	scale_uv = ((uint32_t)vref_mv * 1000000u) / (1u << resolution); /* uV/LSB */
+	/* 64-bit arithmetic: vref_mv * 10^6 overflows 32 bits above 4294 mV */
+	scale_uv = (uint32_t)(((uint64_t)vref_mv * 1000000u) >> resolution); /* uV/LSB */
 	whole = scale_uv / 1000000u;
 	frac = scale_uv % 1000000u;
 
-	return snprintk(dst, len, "%u.%03u", whole, frac) + 1;
+	return snprintk(dst, len, "%u.%06u", whole, frac) + 1;
 }
 
 static int iio_device_io_channels_read_channel_gain(const struct device *dev,
