@@ -14,6 +14,15 @@ boards:
   adi_sdp_k1/stm32f469xx:
     append:
       EXTRA_DTC_OVERLAY_FILE: boards/adi_sdp_k1_stm32f469xx.overlay
+  balletto_b1_dk/ab1c1f4m51820ph0:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: boards/balletto_b1_dk_ab1c1f4m51820ph0.overlay
+  /ensemble_e8_dk\/.*\/rtss_he.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: boards/ensemble_e8_dk_rtss_he.overlay
+  /ensemble_e8_dk\/.*\/rtss_hp.*/:
+    append:
+      EXTRA_DTC_OVERLAY_FILE: boards/ensemble_e8_dk_rtss_hp.overlay
   /native_sim.*/:
     append:
       EXTRA_DTC_OVERLAY_FILE: boards/native_sim.overlay
