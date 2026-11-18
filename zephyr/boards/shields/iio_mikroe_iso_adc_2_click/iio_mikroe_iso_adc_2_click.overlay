@@ -1,0 +1,15 @@
+/*
+ * Copyright (c) 2026 Analog Devices, Inc
+ * SPDX-License-Identifier: MIT
+ */
+
+/ {
+	iio-context {
+		ad7091r {
+			compatible = "iio,io-channels";
+			io-name = "ad7091r";
+			io-channels = <&ad7091r_mikroe_iso_adc_2_click 0>;
+			io-channel-names = "voltage0";
+		};
+	};
+};
